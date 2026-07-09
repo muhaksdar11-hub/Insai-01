@@ -10,6 +10,7 @@ cmds = [
 
 [phases.build]
 cmds = ["npm run build"]
+cacheDirectories = ["node_modules/.cache", ".next/cache"]
 
 [start]
 cmd = ". venv/bin/activate && npm run start"
