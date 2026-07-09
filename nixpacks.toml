@@ -1,16 +1,15 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "python311", "gcc"]
+nixPkgs = ["nodejs_22", "python311", "gcc"]
 
 [phases.install]
 cmds = [
-    "npm ci",
-    "python3 -m venv venv",
-    ". venv/bin/activate && pip install -r python-engine/requirements.txt"
+  "npm ci",
+  "python3 -m venv venv",
+  ". venv/bin/activate && pip install -r requirements.txt"
 ]
 
 [phases.build]
 cmds = ["npm run build"]
-cacheDirectories = ["node_modules/.cache", ".next/cache"]
 
 [start]
-cmd = ". venv/bin/activate && npm run start"
+cmd = ". venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port 8000 & npm run start"
