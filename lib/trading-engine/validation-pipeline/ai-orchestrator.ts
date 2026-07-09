@@ -1,0 +1,236 @@
+import { GoogleGenAI, Type, Schema } from '@google/genai';
+import { AIDecision, AIChecklistItem, RuleResult } from '@/types';
+import { StrategyState } from '../state-machine';
+import { logger } from '../../utils/logger';
+import { getProviderRegistry } from '../../market-data/provider-registry';
+import { getEnv } from '../../utils/env';
+import { ALL_VALIDATORS, ValidatorResult } from './validators';
+
+export interface AIValidationDecision {
+  decision: AIDecision;
+  evidence: string;
+  reasoning: string;
+  rulesChecked: string[];
+  rulesPassed: string[];
+  rulesFailed: string[];
+  conflicts: string;
+}
+
+export interface ValidationPipelineResult {
+  strategyName: string;
+  decision: AIDecision;
+  reasoning: string;
+  evidence?: string;
+  checklist: AIChecklistItem[];
+  riskNotes: string;
+  missingFactors: string[];
+  recommendedAction: string;
+  aiReview?: AIValidationDecision;
+}
+
+const STRATEGY_VALIDATORS: Record<string, string[]> = {
+  'strategy-1': ['Trend Validator', 'Session Validator', 'Liquidity Sweep Validator', 'CHOCH Validator', 'Fair Value Gap Validator', 'Risk Validator'],
+  'strategy-2': ['Trend Validator', 'Order Block Validator', 'Liquidity Sweep Validator', 'Risk Validator'], 
+  'strategy-3': ['Trend Validator', 'Liquidity Sweep Validator', 'Risk Validator'],
+  'strategy-4': ['News Validator', 'Liquidity Sweep Validator', 'Market Structure Validator', 'Risk Validator'],
+};
+
+export class AIValidationOrchestrator {
+  private ai: GoogleGenAI | null = null;
+  private cache = new Map<string, ValidationPipelineResult>();
+  private readonly CACHE_TTL = 5 * 60 * 1000;
+
+  private get isConfigured(): boolean {
+    return !!getEnv('GEMINI_API_KEY');
+  }
+
+  private getAiClient(): GoogleGenAI | null {
+    if (this.ai) return this.ai;
+    const apiKey = getEnv('GEMINI_API_KEY');
+    if (apiKey) {
+      this.ai = new GoogleGenAI({ apiKey });
+      return this.ai;
+    }
+    return null;
+  }
+
+  public async runPipeline(
+    strategyId: string,
+    state: StrategyState,
+    ruleResults: Record<string, RuleResult>,
+    marketContext: any
+  ): Promise<ValidationPipelineResult> {
+    
+    const startTime = performance.now();
+    
+    // 1. Kumpulkan hasil semua validator independen dan prioritaskan rule kritikal
+    const activeValidators = [...STRATEGY_VALIDATORS[strategyId] || ['Trend Validator', 'Risk Validator']];
+    
+    // Sort: Critical rules first for faster early exit
+    activeValidators.sort((a, b) => {
+       const vA = ALL_VALIDATORS[a];
+       const vB = ALL_VALIDATORS[b];
+       if (vA?.isCritical && !vB?.isCritical) return -1;
+       if (!vA?.isCritical && vB?.isCritical) return 1;
+       return 0;
+    });
+
+    const validatorResults: ValidatorResult[] = [];
+    let criticalFail = false;
+    let failedRules: string[] = [];
+    
+    for (const vName of activeValidators) {
+      const validator = ALL_VALIDATORS[vName];
+      if (validator) {
+         const res = validator.validate(ruleResults, marketContext);
+         validatorResults.push(res);
+         if (res.status === 'FAIL') {
+             failedRules.push(res.rule);
+             if (res.isCritical) {
+                 criticalFail = true;
+                 break; // EARLY EXIT: Stop processing other rules to save CPU
+             }
+         }
+      } else {
+         validatorResults.push({ rule: vName, status: 'WAIT', reason: 'Validator not implemented', evidence: '', isCritical: false });
+      }
+    }
+
+    // 2. Menghentikan validasi lebih awal jika rule kritikal gagal (early exit)
+    if (criticalFail) {
+      const endTime = performance.now();
+      logger.warn(`Early exit triggered for ${strategyId}: ${failedRules.join(', ')} failed. Evaluated in ${(endTime - startTime).toFixed(2)}ms`);
+      return {
+        strategyName: strategyId,
+        decision: 'REJECTED',
+        reasoning: `Early exit: critical rules failed (${failedRules.join(', ')}).`,
+        evidence: 'Critical failure detected in rule engine.',
+        checklist: validatorResults,
+        riskNotes: 'Rule Engine invalidated the setup early.',
+        missingFactors: [],
+        recommendedAction: 'wait'
+      };
+    }
+
+    // 3. Deteksi Konflik (AI akan membantu memvalidasi rule engine hasil ini)
+    const latestCandle = marketContext?.candles?.[marketContext?.candles?.length - 1];
+    const timestamp = latestCandle?.timestamp || 'unknown';
+    const cacheKey = `${strategyId}-${timestamp}-${state.stateName}`;
+    
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Check Python Engine Health First
+    try {
+        const { PythonEngineManager } = await import('../../mcp/engines/deployment');
+        const pyHealth = await PythonEngineManager.evaluate();
+        if (pyHealth.status !== 'active') {
+             const waits = validatorResults.filter(v => v.status === 'WAIT').map(v => v.rule);
+             return {
+                strategyName: strategyId,
+                decision: 'WAIT',
+                checklist: validatorResults,
+                reasoning: `Python Engine OFFLINE: ${pyHealth.message}. Waiting for Python Engine.`,
+                evidence: 'System degraded. AI request blocked.',
+                riskNotes: 'Python Engine Offline',
+                missingFactors: ['Python Engine', ...waits],
+                recommendedAction: 'wait'
+             };
+        }
+    } catch (e: any) {
+         logger.warn('Failed to check python engine status', e.message);
+    }
+
+    const aiClient = this.getAiClient();
+    
+    if (!this.isConfigured || !aiClient) {
+       return {
+          strategyName: strategyId,
+          decision: 'FAILED',
+          checklist: validatorResults,
+          reasoning: 'AI Service is not configured (Missing API Key). Cannot validate signal.',
+          evidence: 'System degraded. AI validation bypassed and rejected.',
+          riskNotes: 'AI Offline - Blocked',
+          missingFactors: ['AI Validation'],
+          recommendedAction: 'block'
+       };
+    }
+
+    try {
+      // 4. AI Validates the Rule Engine outputs
+      // Optimize prompt size by excluding raw evidence JSON which can be large
+      const simplifiedResults = validatorResults.map(r => ({ rule: r.rule, status: r.status, reason: r.reason, isCritical: r.isCritical }));
+
+      const prompt = `INSAI Analyst. Strategi: ${strategyId} | State: ${state.stateName}. TUGAS: Validasi Rule Engine. Deteksi konflik. Hasilkan keputusan berdasar bukti.
+RESULTS: ${JSON.stringify(simplifiedResults)}`;
+
+      const responseSchema: Schema = {
+        type: Type.OBJECT,
+        properties: {
+          decision: { type: Type.STRING, enum: ['APPROVED', 'REJECTED', 'WAIT', 'INVALIDATED'] },
+          evidence: { type: Type.STRING },
+          reasoning: { type: Type.STRING },
+          rulesChecked: { type: Type.ARRAY, items: { type: Type.STRING } },
+          rulesPassed: { type: Type.ARRAY, items: { type: Type.STRING } },
+          rulesFailed: { type: Type.ARRAY, items: { type: Type.STRING } },
+          conflicts: { type: Type.STRING }
+        },
+        required: ['decision', 'evidence', 'reasoning', 'rulesChecked', 'rulesPassed', 'rulesFailed']
+      };
+
+      const response = await aiClient.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: responseSchema,
+          temperature: 0,
+        },
+      });
+
+      const text = response.text;
+      if (!text) throw new Error('No response from Gemini API');
+      
+      const parsed = JSON.parse(text) as AIValidationDecision;
+      const aiDecision = parsed.decision;
+      
+      const finalChecklist = validatorResults;
+      
+      const result: ValidationPipelineResult = {
+        strategyName: strategyId,
+        decision: aiDecision,
+        checklist: finalChecklist,
+        reasoning: parsed.reasoning + (parsed.conflicts ? ` [Conflicts: ${parsed.conflicts}]` : ''),
+        evidence: parsed.evidence,
+        riskNotes: finalChecklist.find(c => c.rule === 'Risk Validator')?.reason || 'OK',
+        missingFactors: finalChecklist.filter(c => c.status === 'WAIT').map(c => c.rule),
+        recommendedAction: aiDecision === 'APPROVED' ? 'allow_signal' : 'wait',
+        aiReview: parsed
+      };
+
+      const endTime = performance.now();
+      logger.info(`AI Validation Orchestrator completed for ${strategyId} in ${(endTime - startTime).toFixed(2)}ms`);
+
+      this.cache.set(cacheKey, result);
+      setTimeout(() => this.cache.delete(cacheKey), this.CACHE_TTL);
+      return result;
+
+    } catch (error: any) {
+      const endTime = performance.now();
+      logger.error(`AI Validation Orchestrator failed for ${strategyId} after ${(endTime - startTime).toFixed(2)}ms: ` + error.message);
+      getProviderRegistry().reportError('GeminiAI', error.message);
+      return {
+        strategyName: strategyId,
+        decision: 'FAILED',
+        checklist: validatorResults,
+        reasoning: 'AI Error: ' + error.message,
+        evidence: 'Error connecting to AI validation.',
+        riskNotes: 'Error',
+        missingFactors: ['AI Validation'],
+        recommendedAction: 'block'
+      };
+    }
+  }
+}

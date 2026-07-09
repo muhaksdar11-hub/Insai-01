@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.env*
+!.env.example
+npm-debug.log
+README.md
+Dockerfile
+.dockerignore
+.railwayignore
+railway.toml
+
+# Python cache and environment
+.venv
+__pycache__
+*.pyc
