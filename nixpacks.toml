@@ -1,6 +1,4 @@
-[providers]
-- node
-- python
+providers = ["node", "python"]
 
 [phases.setup]
 nixPkgs = ["nodejs_20", "python311", "gcc"]
@@ -8,7 +6,7 @@ nixPkgs = ["nodejs_20", "python311", "gcc"]
 [phases.install]
 cmds = [
     "npm ci",
-    "pip install -r python-engine/requirements.txt"
+    "pip3 install -r python-engine/requirements.txt"
 ]
 
 [phases.build]
