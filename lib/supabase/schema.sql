@@ -1,6 +1,7 @@
--- INSAI Database Schema Foundation
--- Based on 12_Database_Schema.md
+-- Base extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Core Tables
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email VARCHAR(255) UNIQUE NOT NULL,
@@ -15,9 +16,22 @@ CREATE TABLE IF NOT EXISTS strategies (
   description TEXT,
   status VARCHAR(50) NOT NULL,
   enabled BOOLEAN DEFAULT false,
+  config JSONB,
   priority INT DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS strategy_states (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  strategy_id VARCHAR(100) REFERENCES strategies(id),
+  symbol VARCHAR(20) NOT NULL,
+  timeframe VARCHAR(10) NOT NULL,
+  state_name VARCHAR(50) NOT NULL,
+  state_status VARCHAR(50) NOT NULL,
+  signal_key VARCHAR(255),
+  context_json JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS signals (
@@ -32,26 +46,10 @@ CREATE TABLE IF NOT EXISTS signals (
   sl_price NUMERIC,
   tp1_price NUMERIC,
   tp2_price NUMERIC,
-  tp3_price NUMERIC,
-  ai_decision VARCHAR(50),
+  ai_confidence NUMERIC,
   ai_reasoning TEXT,
   status VARCHAR(50) NOT NULL,
   correlation_id VARCHAR(255),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS strategy_states (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  strategy_id VARCHAR(100) REFERENCES strategies(id),
-  symbol VARCHAR(20) NOT NULL,
-  timeframe VARCHAR(10) NOT NULL,
-  state_name VARCHAR(50) NOT NULL,
-  state_status VARCHAR(50) NOT NULL,
-  signal_key VARCHAR(255) REFERENCES signals(signal_key),
-  correlation_id VARCHAR(255),
-  payload_json JSONB,
-  reason TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -60,9 +58,11 @@ CREATE TABLE IF NOT EXISTS signal_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   signal_key VARCHAR(255) REFERENCES signals(signal_key),
   event_type VARCHAR(50) NOT NULL,
+  correlation_id VARCHAR(255),
   payload_json JSONB,
+  reason TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(signal_key, event_type)
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS history (
@@ -76,26 +76,33 @@ CREATE TABLE IF NOT EXISTS history (
   rr_realized NUMERIC,
   reason TEXT,
   correlation_id VARCHAR(255),
-  closed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  closed_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS market_snapshots (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   symbol VARCHAR(20) NOT NULL,
-  timeframe VARCHAR(10),
-  payload_json JSONB,
-  source VARCHAR(50),
+  timeframe VARCHAR(10) NOT NULL,
+  close NUMERIC NOT NULL,
+  high NUMERIC,
+  low NUMERIC,
+  open NUMERIC,
+  volume NUMERIC,
+  indicators_json JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS news_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  source VARCHAR(100),
-  title VARCHAR(500),
-  impact VARCHAR(50),
-  event_time TIMESTAMPTZ,
-  payload_json JSONB,
+  event_id VARCHAR(100) UNIQUE NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  currency VARCHAR(10),
+  impact VARCHAR(20),
+  forecast VARCHAR(50),
+  previous VARCHAR(50),
+  actual VARCHAR(50),
+  published_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -115,7 +122,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 
 CREATE TABLE IF NOT EXISTS mcp_services (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name VARCHAR(100) NOT NULL,
+  name VARCHAR(100) UNIQUE NOT NULL,
   category VARCHAR(50),
   purpose TEXT,
   source_type VARCHAR(50),
@@ -314,7 +321,6 @@ DROP POLICY IF EXISTS "Service Role All Access on job_runs" ON job_runs;
 CREATE POLICY "Service Role All Access on job_runs" ON job_runs FOR ALL USING (true);
 DROP POLICY IF EXISTS "Service Role All Access on backtest_runs" ON backtest_runs;
 CREATE POLICY "Service Role All Access on backtest_runs" ON backtest_runs FOR ALL USING (true);
-
 
 -- Added Constraints from PRD
 DO $$ 
