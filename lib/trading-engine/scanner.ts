@@ -70,10 +70,13 @@ export class MarketScanner {
         const strats = await getSupabaseClient().getStrategies();
         if (Array.isArray(strats)) {
           activeCount = strats.filter(s => s.enabled).length;
+          logger.info(`Found ${strats.length} strategies, ${activeCount} active.`);
+        } else {
+          logger.warn(`getStrategies returned non-array:`, strats);
         }
-      } catch (e) {
+      } catch (e: any) {
         // Assume none active if DB fails, wait for next tick
-        logger.warn('Failed to check active strategies, skipping scan tick.');
+        logger.warn(`Failed to check active strategies, skipping scan tick. Error: ${e.message}`);
         return;
       }
       

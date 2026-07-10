@@ -28,6 +28,7 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
+  serverExternalPackages: ['ws'],
   experimental: {
   },
   async headers() {

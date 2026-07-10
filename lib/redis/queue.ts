@@ -54,9 +54,14 @@ export class QueueManager {
     if (redisUrl) {
       this.useRedis = true;
       if (!this.publisher) {
-        this.publisher = new Redis(redisUrl, { lazyConnect: true, maxRetriesPerRequest: 1, retryStrategy: () => null });
-        this.subscriber = new Redis(redisUrl, { lazyConnect: true, maxRetriesPerRequest: 1, retryStrategy: () => null });
-        this.client = new Redis(redisUrl, { lazyConnect: true, maxRetriesPerRequest: 1, retryStrategy: () => null });
+        const redisOpts = { 
+          lazyConnect: true, 
+          maxRetriesPerRequest: 1, 
+          retryStrategy: (times: number) => Math.min(times * 1000, 5000) 
+        };
+        this.publisher = new Redis(redisUrl, redisOpts);
+        this.subscriber = new Redis(redisUrl, redisOpts);
+        this.client = new Redis(redisUrl, redisOpts);
         this.setupListeners();
       }
     } else {

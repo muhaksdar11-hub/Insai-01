@@ -260,10 +260,10 @@ export class SupabaseService {
       return (data || []).map((row: any) => ({
         id: row.id,
         name: row.name,
-        description: row.config?.description || '',
-        status: row.is_active ? 'active' : 'inactive',
+        description: row.description || row.config?.description || '',
+        status: row.status || (row.enabled ? 'active' : 'inactive'),
         parameters: row.config || {},
-        enabled: row.is_active
+        enabled: row.enabled
       }));
     } catch (err: any) {
       logger.error(`Supabase fetch strategies error: ${err.message} (URL: ${this.currentUrl})`);
