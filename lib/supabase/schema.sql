@@ -274,30 +274,61 @@ ALTER TABLE job_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE backtest_runs ENABLE ROW LEVEL SECURITY;
 
 -- Service Role full access policies (Engine bypasses RLS using service_role key)
+DROP POLICY IF EXISTS "Service Role All Access on users" ON users;
 CREATE POLICY "Service Role All Access on users" ON users FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on strategies" ON strategies;
 CREATE POLICY "Service Role All Access on strategies" ON strategies FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on strategy_states" ON strategy_states;
 CREATE POLICY "Service Role All Access on strategy_states" ON strategy_states FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on signals" ON signals;
 CREATE POLICY "Service Role All Access on signals" ON signals FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on signal_events" ON signal_events;
 CREATE POLICY "Service Role All Access on signal_events" ON signal_events FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on history" ON history;
 CREATE POLICY "Service Role All Access on history" ON history FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on market_snapshots" ON market_snapshots;
 CREATE POLICY "Service Role All Access on market_snapshots" ON market_snapshots FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on news_events" ON news_events;
 CREATE POLICY "Service Role All Access on news_events" ON news_events FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on api_keys" ON api_keys;
 CREATE POLICY "Service Role All Access on api_keys" ON api_keys FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on mcp_services" ON mcp_services;
 CREATE POLICY "Service Role All Access on mcp_services" ON mcp_services FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on notifications" ON notifications;
 CREATE POLICY "Service Role All Access on notifications" ON notifications FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on alerts" ON alerts;
 CREATE POLICY "Service Role All Access on alerts" ON alerts FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on audit_logs" ON audit_logs;
 CREATE POLICY "Service Role All Access on audit_logs" ON audit_logs FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on signal_evidence" ON signal_evidence;
 CREATE POLICY "Service Role All Access on signal_evidence" ON signal_evidence FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on risk_events" ON risk_events;
 CREATE POLICY "Service Role All Access on risk_events" ON risk_events FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on provider_health" ON provider_health;
 CREATE POLICY "Service Role All Access on provider_health" ON provider_health FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on config_versions" ON config_versions;
 CREATE POLICY "Service Role All Access on config_versions" ON config_versions FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on job_queue" ON job_queue;
 CREATE POLICY "Service Role All Access on job_queue" ON job_queue FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on job_runs" ON job_runs;
 CREATE POLICY "Service Role All Access on job_runs" ON job_runs FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service Role All Access on backtest_runs" ON backtest_runs;
 CREATE POLICY "Service Role All Access on backtest_runs" ON backtest_runs FOR ALL USING (true);
 
 
 -- Added Constraints from PRD
-ALTER TABLE strategies ADD CONSTRAINT chk_strategy_status CHECK (status IN ('active', 'inactive', 'testing', 'archived'));
-ALTER TABLE signals ADD CONSTRAINT chk_signal_status CHECK (status IN ('PENDING', 'ACTIVE', 'FINISHED', 'REJECTED', 'EXPIRED', 'WAIT_AI', 'WAIT_RETEST', 'WAIT_CONFIRMATION', 'WAIT_NECKLINE_BREAK', 'WAIT_NEWS', 'APPROVED'));
-ALTER TABLE history ADD CONSTRAINT chk_history_status CHECK (status IN ('FINISHED', 'REJECTED', 'EXPIRED'));
-ALTER TABLE history ADD CONSTRAINT chk_history_outcome CHECK (outcome IN ('WIN', 'LOSS', 'BREAK_EVEN', 'UNKNOWN'));
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_strategy_status') THEN
+    ALTER TABLE strategies ADD CONSTRAINT chk_strategy_status CHECK (status IN ('active', 'inactive', 'testing', 'archived'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_signal_status') THEN
+    ALTER TABLE signals ADD CONSTRAINT chk_signal_status CHECK (status IN ('PENDING', 'ACTIVE', 'FINISHED', 'REJECTED', 'EXPIRED', 'WAIT_AI', 'WAIT_RETEST', 'WAIT_CONFIRMATION', 'WAIT_NECKLINE_BREAK', 'WAIT_NEWS', 'APPROVED'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_history_status') THEN
+    ALTER TABLE history ADD CONSTRAINT chk_history_status CHECK (status IN ('FINISHED', 'REJECTED', 'EXPIRED'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_history_outcome') THEN
+    ALTER TABLE history ADD CONSTRAINT chk_history_outcome CHECK (outcome IN ('WIN', 'LOSS', 'BREAK_EVEN', 'UNKNOWN'));
+  END IF;
+END $$;
