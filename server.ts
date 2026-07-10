@@ -5,7 +5,7 @@ import { getMarketScanner } from './lib/trading-engine/scanner';
 import { logger } from './lib/utils/logger';
 import { validateEnvironment } from './lib/security/env-validator';
 import { spawn } from 'child_process';
-import path from 'path';
+import * as path from 'path';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
@@ -29,7 +29,14 @@ function startPythonEngine() {
 
   logger.info('Starting Python Engine locally...');
   
-  const pythonExec = 'python3';
+  let pythonExec = 'python3';
+  if (process.env.VIRTUAL_ENV) {
+    pythonExec = path.join(process.env.VIRTUAL_ENV, 'bin', 'python');
+  } else if (require('fs').existsSync(path.join(process.cwd(), 'venv', 'bin', 'python3'))) {
+    pythonExec = path.join(process.cwd(), 'venv', 'bin', 'python3');
+  } else if (require('fs').existsSync(path.join(process.cwd(), 'python-engine', '.venv', 'bin', 'python3'))) {
+    pythonExec = path.join(process.cwd(), 'python-engine', '.venv', 'bin', 'python3');
+  }
 
   try {
     pyProcess = spawn(pythonExec, [

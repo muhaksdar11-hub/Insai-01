@@ -138,6 +138,57 @@ export class AIValidationOrchestrator {
                 missingFactors: ['Python Engine', ...waits],
                 recommendedAction: 'wait'
              };
+        } else {
+             // Python Engine is online, perform quantitative validation
+             const defaultPyPort = process.env.PYTHON_PORT || '8181';
+             const pyUrl = getEnv("PYTHON_ENGINE_URL") || `http://127.0.0.1:${defaultPyPort}`;
+             
+             // Build request payload
+             const entryPrice = ruleResults['Entry Validator']?.evidence?.price || (marketContext?.candles && marketContext.candles[marketContext.candles.length-1]?.close) || 0;
+             const slPrice = ruleResults['Risk Validator']?.evidence?.sl || 0;
+             const tpPrice = ruleResults['Risk Validator']?.evidence?.tp1 || 0;
+             const direction = state.stateName.includes('LONG') ? 'LONG' : (state.stateName.includes('SHORT') ? 'SHORT' : 'UNKNOWN');
+
+             if (marketContext?.candles && marketContext.candles.length >= 20) {
+                 const reqPayload = {
+                     symbol: 'XAUUSD',
+                     timeframe: 'M15', // Fallback, could be dynamic
+                     direction: direction,
+                     entry_price: entryPrice,
+                     sl_price: slPrice,
+                     tp_price: tpPrice,
+                     candles: marketContext.candles
+                 };
+
+                 try {
+                     const controller = new AbortController();
+                     const timeout = setTimeout(() => controller.abort(), 5000);
+                     const pyRes = await fetch(`${pyUrl}/validate`, {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(reqPayload),
+                         signal: controller.signal
+                     });
+                     clearTimeout(timeout);
+                     if (pyRes.ok) {
+                         const pyData = await pyRes.json();
+                         
+                         validatorResults.push({
+                             rule: 'Python Quant Engine',
+                             status: pyData.decision === 'APPROVED' ? 'PASS' : (pyData.decision === 'WAIT' ? 'WAIT' : 'FAIL'),
+                             reason: pyData.reasons.join(', '),
+                             evidence: JSON.stringify(pyData.metrics),
+                             isCritical: false
+                         });
+                     } else {
+                         logger.warn(`Python Engine /validate returned ${pyRes.status}`);
+                     }
+                 } catch (e: any) {
+                     logger.warn(`Python Engine /validate failed: ${e.message}`);
+                 }
+             } else {
+                 logger.warn('Insufficient candles for python validation (< 20)');
+             }
         }
     } catch (e: any) {
          logger.warn('Failed to check python engine status', e.message);
