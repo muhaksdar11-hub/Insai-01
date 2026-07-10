@@ -222,7 +222,7 @@ export class SupabaseService {
       if (error && error.code !== 'PGRST116') throw error;
       return data;
     } catch (err: any) {
-      logger.error(`Supabase fetch strategy state error: ${err.message}`);
+      logger.error(`Supabase fetch strategy state error: ${err.message} (URL: ${this.currentUrl})`);
       return null;
     }
   }
@@ -266,7 +266,7 @@ export class SupabaseService {
         enabled: row.is_active
       }));
     } catch (err: any) {
-      logger.error(`Supabase fetch strategies error: ${err.message}`);
+      logger.error(`Supabase fetch strategies error: ${err.message} (URL: ${this.currentUrl})`);
       return { status: 'error', available: false, reason: err.message };
     }
   }
