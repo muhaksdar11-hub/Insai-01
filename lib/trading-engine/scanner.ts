@@ -58,7 +58,7 @@ export class MarketScanner {
         this.lastScanTime = now;
         this.scan();
       }
-    }, 5000);
+    }, 15000);
   }
 
   public stop() {

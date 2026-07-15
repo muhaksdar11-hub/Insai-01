@@ -127,21 +127,22 @@ export class SupabaseService {
       return null;
     }
     try {
-      return await this.withRetry(async () => {
-        const { data, error } = await supabase
-          .from('signal_evidence')
-          .insert([{
-             signal_key: payload.signal_key,
-             engine_name: payload.engine_name,
-             evidence_type: payload.evidence_type,
-             details: payload.details,
-             passed: payload.passed,
-             reason: payload.reason
-          }])
-          .select();
-        if (error) throw error;
-        return data;
-      });
+      const { data, error } = await supabase
+        .from('signal_evidence')
+        .insert([{
+           signal_key: payload.signal_key,
+           engine_name: payload.engine_name,
+           evidence_type: payload.evidence_type,
+           details: payload.details,
+           passed: payload.passed,
+           reason: payload.reason
+        }])
+        .select();
+      if (error) {
+         logger.error(`Supabase insert signal evidence error (ignoring to prevent CB trip): ${error.message}`);
+         return null;
+      }
+      return data;
     } catch (err: any) {
       logger.error(`Supabase insert signal evidence error: ${err.message}`);
       return null;
@@ -305,24 +306,25 @@ export class SupabaseService {
       return null;
     }
     try {
-      return await this.withRetry(async () => {
-        const { data, error } = await supabase
-          .from('strategy_states')
-          .insert([{
-             strategy_id: payload.strategy_id,
-             symbol: payload.symbol,
-             timeframe: payload.timeframe,
-             state_name: payload.state_name,
-             state_status: payload.state_status,
-             signal_key: payload.signal_key,
-             payload_json: payload.payload_json,
-             reason: payload.reason
-          }])
-          .select()
-          .single();
-        if (error) throw error;
-        return data;
-      });
+      const { data, error } = await supabase
+        .from('strategy_states')
+        .insert([{
+           strategy_id: payload.strategy_id,
+           symbol: payload.symbol,
+           timeframe: payload.timeframe,
+           state_name: payload.state_name,
+           state_status: payload.state_status,
+           signal_key: payload.signal_key,
+           payload_json: payload.payload_json,
+           reason: payload.reason
+        }])
+        .select()
+        .single();
+      if (error) {
+        logger.error(`Supabase insert strategy state error (ignoring to prevent CB trip): ${error.message}`);
+        return null;
+      }
+      return data;
     } catch (err: any) {
       logger.error(`Supabase insert strategy state error: ${err.message}`);
       return null;

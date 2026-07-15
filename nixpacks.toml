@@ -19,7 +19,7 @@ cacheDirectories = ["/root/.npm", "/root/.cache/pip"]
 [phases.build]
 cmds = [
     "npm run build",
-    "rm -rf server.pid pyenv python-engine/venv python-engine/__pycache__ patch.sh fix.sh"
+    "rm -rf server.pid pyenv python-engine/__pycache__ patch.sh fix.sh"
 ]
 cacheDirectories = ["node_modules/.cache", ".next/cache"]
 

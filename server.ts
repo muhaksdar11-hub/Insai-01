@@ -23,7 +23,7 @@ function startPythonEngine() {
   const externalUrl = process.env.PYTHON_ENGINE_URL;
   const pythonPort = process.env.PYTHON_PORT || '8181';
   
-  if (externalUrl) {
+  if (externalUrl && !externalUrl.includes('127.0.0.1') && !externalUrl.includes('localhost')) {
     logger.info(`External Python Engine configured (${externalUrl}), skipping local spawn.`);
     return;
   }

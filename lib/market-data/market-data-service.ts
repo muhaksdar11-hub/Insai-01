@@ -282,8 +282,8 @@ export class MarketDataService {
       this.getLatestNews(),
       this.getCalendarEvents(),
       this.getCandles(symbol, timeframe, 250),
-      this.getLatestPrice('DXY', freshnessWindowMs).catch(() => ({ status: 'error', reason: 'Failed to fetch DXY' })),
-      this.getLatestPrice('US10Y', freshnessWindowMs).catch(() => ({ status: 'error', reason: 'Failed to fetch US10Y' }))
+      this.getLatestPrice('DXY', 60000).catch(() => ({ status: 'error', reason: 'Failed to fetch DXY' })),
+      this.getLatestPrice('US10Y', 60000).catch(() => ({ status: 'error', reason: 'Failed to fetch US10Y' }))
     ]);
     
     // COT Data - Requires CFTC API or Premium Data Provider (e.g., Quandl)
