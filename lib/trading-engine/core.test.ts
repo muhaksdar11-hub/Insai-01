@@ -9,7 +9,7 @@ describe('Rule Engine & State Machine', () => {
   });
 
   it('should instantiate StateMachine', () => {
-    const stateMachine = new StateMachine('strategy-1');
+    const stateMachine = new StateMachine('strategy-1-smc');
     expect(stateMachine).toBeDefined();
   });
 });

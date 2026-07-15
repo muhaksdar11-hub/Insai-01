@@ -40,9 +40,7 @@ export class ForexFactoryProvider implements CalendarProvider {
         attempt++;
         if (error.message === 'Rate Limited') {
           getProviderRegistry().reportError(this.name, 'Rate Limited');
-          if (attempt >= maxRetries) throw new Error('Provider Unavailable (Rate Limited)');
-          // Exponential backoff
-          await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 2000));
+          throw new Error('Provider Unavailable (Rate Limited)');
         } else {
           if (attempt >= maxRetries) throw error;
           await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000));
@@ -71,7 +69,7 @@ export class ForexFactoryProvider implements CalendarProvider {
         this.lastFetchTime = Date.now();
         
         const mappedData = data.map((item: any) => ({
-          id: item.id || Math.random().toString(),
+          id: item.id || crypto.randomUUID(),
           title: item.title,
           country: item.country,
           impact: item.impact.toLowerCase() === 'high' ? 'high' : item.impact.toLowerCase() === 'medium' ? 'medium' : 'low',

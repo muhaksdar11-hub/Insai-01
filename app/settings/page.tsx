@@ -65,7 +65,7 @@ export default function Settings() {
     try {
       const res = await fetch("/api/system/logs");
       const data = await res.json();
-      if (data.status === "success") {
+      if (data.success || data.status === "success") {
         setLogs(data.data);
       }
     } catch (e) {
@@ -168,9 +168,9 @@ export default function Settings() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
         {/* Runtime Health */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-3">
-          <h3 className="text-[10px] font-bold text-zinc-300 mb-3 uppercase tracking-wider flex items-center gap-1.5">
-            <Activity className="w-3 h-3" /> Runtime Health
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+          <h3 className="text-[10px] font-bold text-zinc-300 mb-4 uppercase tracking-wider flex items-center gap-1.5">
+            <Activity className="w-3.5 h-3.5 text-blue-400" /> Runtime Health
           </h3>
           <div className="space-y-3">
             {loadingHealth ? (
@@ -180,40 +180,40 @@ export default function Settings() {
                 <div className="h-6 bg-zinc-800/50 animate-pulse rounded w-full"></div>
               </div>
             ) : errorHealth ? (
-              <div className="text-[11px] text-rose-400 flex flex-col items-center justify-center py-4 bg-rose-500/10 rounded border border-rose-500/20 gap-2">
-                <span className="text-center">{errorHealth}</span>
-                <button onClick={refetchHealth} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded transition-colors">Retry</button>
+              <div className="text-[11px] text-rose-400 flex flex-col items-center justify-center py-5 bg-rose-500/10 rounded-lg border border-rose-500/20 gap-3">
+                <span className="text-center font-medium">{errorHealth}</span>
+                <button onClick={refetchHealth} className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded font-medium transition-colors">Retry Connection</button>
               </div>
             ) : healthStatus ? (
               healthStatus.services.map((service: any) => (
                 <div
                   key={service.serviceName}
-                  className="flex flex-col py-2 border-b border-zinc-800/50 last:border-0"
+                  className="flex flex-col py-2.5 border-b border-zinc-800/50 last:border-0"
                 >
                   <div className="flex justify-between items-center text-[11px]" title={service.message}>
-                    <span className="text-zinc-300 flex items-center gap-1.5">
+                    <span className="text-zinc-300 flex items-center gap-2">
                       {service.serviceName === "Supabase" && (
-                        <Server className="w-3 h-3 text-zinc-500" />
+                        <Server className="w-3.5 h-3.5 text-zinc-500" />
                       )}
                       {service.serviceName === "MarketData" && (
-                        <Activity className="w-3 h-3 text-zinc-500" />
+                        <Activity className="w-3.5 h-3.5 text-zinc-500" />
                       )}
                       {service.serviceName === "EconomicCalendar" && (
-                        <BarChart2 className="w-3 h-3 text-zinc-500" />
+                        <BarChart2 className="w-3.5 h-3.5 text-zinc-500" />
                       )}
                       {service.serviceName === "GeminiAI" && (
-                        <SettingsIcon className="w-3 h-3 text-zinc-500" />
+                        <SettingsIcon className="w-3.5 h-3.5 text-zinc-500" />
                       )}
                       {service.serviceName === "TelegramBot" && (
-                        <SettingsIcon className="w-3 h-3 text-zinc-500" />
+                        <SettingsIcon className="w-3.5 h-3.5 text-zinc-500" />
                       )}
                       {service.serviceName === "RuleEngine" && (
-                        <ShieldAlert className="w-3 h-3 text-zinc-500" />
+                        <ShieldAlert className="w-3.5 h-3.5 text-zinc-500" />
                       )}
                       {service.serviceName === "PythonEngine" && (
-                        <Server className="w-3 h-3 text-zinc-500" />
+                        <Server className="w-3.5 h-3.5 text-zinc-500" />
                       )}
-                      {service.serviceName}
+                      <span className="font-medium">{service.serviceName}</span>
                     </span>
                     <span
                       className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wide border ${getStatusColor(service.status)}`}
@@ -222,76 +222,76 @@ export default function Settings() {
                     </span>
                   </div>
                   {service.status !== 'ONLINE' && service.message && (
-                    <span className="text-[9px] text-zinc-500 mt-1 pl-4.5 line-clamp-2">
+                    <span className="text-[9px] text-zinc-500 mt-1.5 pl-5.5 line-clamp-2">
                       Reason: {service.message}
                     </span>
                   )}
                 </div>
               ))
             ) : (
-              <div className="text-[11px] text-zinc-500">
+              <div className="text-[11px] text-zinc-500 text-center py-4">
                 Loading health status...
               </div>
             )}
 
-            <div className="flex justify-between items-center text-[11px] py-2 border-t border-zinc-800/50">
-              <span className="text-zinc-300 flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 text-zinc-500" /> Recent
+            <div className="flex justify-between items-center text-[11px] py-3 border-t border-zinc-800/50">
+              <span className="text-zinc-300 flex items-center gap-1.5 font-medium">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500/70" /> Recent
                 Errors
               </span>
-              <span className="text-zinc-500 text-[10px]">
+              <span className="text-zinc-500 text-[10px] bg-zinc-950 px-2 py-0.5 rounded-full border border-zinc-800">
                 {errorsData?.count24h ?? 0} in last 24h
               </span>
             </div>
 
-            <div className="mt-2 pt-2 space-y-2">
+            <div className="mt-3 pt-3 space-y-2 border-t border-zinc-800/50">
               <button
                 onClick={() => setShowHealthSnapshot(true)}
-                className="flex items-center justify-center gap-1.5 w-full py-1.5 bg-zinc-950/50 border border-zinc-800/50 rounded-md text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors"
+                className="flex items-center justify-center gap-1.5 w-full py-2 bg-zinc-950/50 border border-zinc-800/50 rounded-lg text-[10px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
               >
-                <Activity className="w-3 h-3" /> View Health Snapshot
+                <Activity className="w-3.5 h-3.5" /> View Health Snapshot
               </button>
               <button
                 onClick={loadLogs}
-                className="flex items-center justify-center gap-1.5 w-full py-1.5 bg-zinc-950/50 border border-zinc-800/50 rounded-md text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors"
+                className="flex items-center justify-center gap-1.5 w-full py-2 bg-zinc-950/50 border border-zinc-800/50 rounded-lg text-[10px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
               >
-                <FileText className="w-3 h-3" /> View System Logs
+                <FileText className="w-3.5 h-3.5" /> View System Logs
               </button>
             </div>
           </div>
         </div>
 
         {/* API Status */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-3">
-          <div className="flex items-center justify-between mb-3">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
             <h3 className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-              <Key className="w-3 h-3" /> Config & API Keys
+              <Key className="w-3.5 h-3.5 text-blue-400" /> Config & API Keys
             </h3>
             {configStatus?.lastChecked && (
-              <span className="text-[8px] text-zinc-500 font-mono flex items-center gap-1">
+              <span className="text-[8px] text-zinc-500 font-mono flex items-center gap-1 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
                 <Clock className="w-2.5 h-2.5" />
                 <ClientDate date={configStatus.lastChecked} format="toLocaleTimeString" />
               </span>
             )}
           </div>
-          <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+          <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
             {loadingConfig ? (
               <div className="text-[11px] text-zinc-500 flex flex-col gap-2">
                 <div className="h-6 bg-zinc-800/50 animate-pulse rounded w-full"></div>
                 <div className="h-6 bg-zinc-800/50 animate-pulse rounded w-full"></div>
               </div>
             ) : errorConfig ? (
-              <div className="text-[11px] text-rose-400 flex flex-col items-center justify-center py-4 bg-rose-500/10 rounded border border-rose-500/20 gap-2">
-                <span className="text-center">{errorConfig}</span>
-                <button onClick={refetchConfig} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded transition-colors">Retry</button>
+              <div className="text-[11px] text-rose-400 flex flex-col items-center justify-center py-5 bg-rose-500/10 rounded-lg border border-rose-500/20 gap-3">
+                <span className="text-center font-medium">{errorConfig}</span>
+                <button onClick={refetchConfig} className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded font-medium transition-colors">Retry Connection</button>
               </div>
             ) : configStatus?.env ? (
               <>
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {Object.entries(configStatus.env).map(([key, value]) => (
-                    <div key={key} className="flex flex-col gap-1.5 pb-3 border-b border-zinc-800/50 last:border-0 last:pb-0">
+                    <div key={key} className="flex flex-col gap-2 pb-4 border-b border-zinc-800/50 last:border-0 last:pb-0">
                       <div className="flex justify-between items-center">
-                        <label className="text-zinc-300 capitalize text-[9px] font-medium tracking-wide">
+                        <label className="text-zinc-300 capitalize text-[10px] font-medium tracking-wide">
                           {key.replace(/_/g, " ")}
                         </label>
                         <span
@@ -307,13 +307,13 @@ export default function Settings() {
                            disabled={value === "configured" || savingKey === key}
                            value={envValues[key] || ""}
                            onChange={(e) => setEnvValues({ ...envValues, [key]: e.target.value })}
-                           className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-[10px] text-zinc-300 focus:outline-none focus:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                           className="flex-1 bg-zinc-950 border border-zinc-800 rounded-md px-3 py-1.5 text-[10px] text-zinc-300 focus:outline-none focus:border-zinc-600 focus:bg-zinc-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                          />
                          {value !== "configured" && (
                            <button 
                              onClick={() => handleSaveEnv(key)}
                              disabled={!envValues[key] || savingKey === key}
-                             className="px-2.5 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded text-[9px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                             className="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-md text-[9px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                            >
                              {savingKey === key ? "SAVING" : "SAVE"}
                            </button>
@@ -324,7 +324,7 @@ export default function Settings() {
                 </div>
               </>
             ) : (
-              <div className="text-[11px] text-zinc-500">
+              <div className="text-[11px] text-zinc-500 text-center py-4">
                 Loading config status...
               </div>
             )}
@@ -332,9 +332,9 @@ export default function Settings() {
         </div>
 
         {/* System Metrics */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-3">
-          <h3 className="text-[10px] font-bold text-zinc-300 mb-3 uppercase tracking-wider flex items-center gap-1.5">
-            <BarChart2 className="w-3 h-3" /> System Metrics
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+          <h3 className="text-[10px] font-bold text-zinc-300 mb-4 uppercase tracking-wider flex items-center gap-1.5">
+            <BarChart2 className="w-3.5 h-3.5 text-blue-400" /> System Metrics
           </h3>
           <div className="space-y-3">
             {loadingMetrics ? (
@@ -344,51 +344,51 @@ export default function Settings() {
                 <div className="h-6 bg-zinc-800/50 animate-pulse rounded w-full"></div>
               </div>
             ) : errorMetrics ? (
-               <div className="text-[11px] text-rose-400 flex flex-col items-center justify-center py-4 bg-rose-500/10 rounded border border-rose-500/20 gap-2">
-                <span className="text-center">{errorMetrics}</span>
-                <button onClick={refetchMetrics} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded transition-colors">Retry</button>
+               <div className="text-[11px] text-rose-400 flex flex-col items-center justify-center py-5 bg-rose-500/10 rounded-lg border border-rose-500/20 gap-3">
+                <span className="text-center font-medium">{errorMetrics}</span>
+                <button onClick={refetchMetrics} className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded font-medium transition-colors">Retry Connection</button>
               </div>
             ) : metricsData ? (
               <>
-                <div className="flex justify-between items-center text-[11px] py-2 border-b border-zinc-800/50">
-                  <span className="text-zinc-300">Market Data Latency</span>
+                <div className="flex justify-between items-center text-[11px] py-2.5 border-b border-zinc-800/50">
+                  <span className="text-zinc-300 font-medium">Market Data Latency</span>
                   <span
-                    className={`font-mono ${metricsData.marketDataLatencyMs > 500 ? "text-amber-400" : "text-emerald-400"}`}
+                    className={`font-mono font-bold ${metricsData.marketDataLatencyMs > 500 ? "text-amber-400" : "text-emerald-400"}`}
                   >
                     {metricsData.marketDataLatencyMs.toFixed(0)} ms
                   </span>
                 </div>
-                <div className="flex justify-between items-center text-[11px] py-2 border-b border-zinc-800/50">
-                  <span className="text-zinc-300">AI Validation Latency</span>
+                <div className="flex justify-between items-center text-[11px] py-2.5 border-b border-zinc-800/50">
+                  <span className="text-zinc-300 font-medium">AI Validation Latency</span>
                   <span
-                    className={`font-mono ${metricsData.aiValidationLatencyMs > 2000 ? "text-amber-400" : "text-emerald-400"}`}
+                    className={`font-mono font-bold ${metricsData.aiValidationLatencyMs > 2000 ? "text-amber-400" : "text-emerald-400"}`}
                   >
                     {metricsData.aiValidationLatencyMs.toFixed(0)} ms
                   </span>
                 </div>
-                <div className="flex justify-between items-center text-[11px] py-2 border-b border-zinc-800/50">
-                  <span className="text-zinc-300">Signal Throughput</span>
-                  <span className="font-mono text-zinc-300">
+                <div className="flex justify-between items-center text-[11px] py-2.5 border-b border-zinc-800/50">
+                  <span className="text-zinc-300 font-medium">Signal Throughput</span>
+                  <span className="font-mono font-bold text-zinc-300">
                     {metricsData.signalThroughput}
                   </span>
                 </div>
-                <div className="flex justify-between items-center text-[11px] py-2 border-b border-zinc-800/50">
-                  <span className="text-zinc-300">Error Rate</span>
+                <div className="flex justify-between items-center text-[11px] py-2.5 border-b border-zinc-800/50">
+                  <span className="text-zinc-300 font-medium">Error Rate</span>
                   <span
-                    className={`font-mono ${metricsData.errorRate > 0.1 ? "text-rose-400" : "text-emerald-400"}`}
+                    className={`font-mono font-bold ${metricsData.errorRate > 0.1 ? "text-rose-400" : "text-emerald-400"}`}
                   >
                     {(metricsData.errorRate * 100).toFixed(1)}%
                   </span>
                 </div>
-                <div className="flex justify-between items-center text-[11px] py-2">
-                  <span className="text-zinc-300">Notification Delivery</span>
-                  <span className="font-mono text-emerald-400">
+                <div className="flex justify-between items-center text-[11px] py-2.5">
+                  <span className="text-zinc-300 font-medium">Notification Delivery</span>
+                  <span className="font-mono font-bold text-emerald-400">
                     {(metricsData.notificationDeliveryRate * 100).toFixed(1)}%
                   </span>
                 </div>
               </>
             ) : (
-              <div className="text-[11px] text-zinc-500">
+              <div className="text-[11px] text-zinc-500 text-center py-4">
                 Loading system metrics...
               </div>
             )}
@@ -396,10 +396,10 @@ export default function Settings() {
         </div>
 
         {/* MCP Status */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 md:col-span-2 lg:col-span-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 md:col-span-2 lg:col-span-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 gap-4">
             <h3 className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-              <Activity className="w-3 h-3" /> MCP Registry (
+              <Activity className="w-3.5 h-3.5 text-blue-400" /> MCP Registry (
               {filteredMcps.length})
             </h3>
 

@@ -108,11 +108,11 @@ export default function History() {
       </div>
 
       {showFilters && (
-        <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="flex flex-wrap gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
           <select 
             value={timeframeFilter} 
             onChange={(e) => setTimeframeFilter(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] rounded px-2 py-1.5 focus:outline-none focus:border-zinc-700"
+            className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] rounded-lg px-3 py-2 focus:outline-none focus:border-zinc-600 focus:bg-zinc-800 transition-colors cursor-pointer min-h-[36px]"
           >
             <option value="ALL">All Time</option>
             <option value="TODAY">Last 24 Hours</option>
@@ -122,7 +122,7 @@ export default function History() {
           <select 
             value={filter} 
             onChange={(e) => setFilter(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] rounded px-2 py-1.5 focus:outline-none focus:border-zinc-700"
+            className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] rounded-lg px-3 py-2 focus:outline-none focus:border-zinc-600 focus:bg-zinc-800 transition-colors cursor-pointer min-h-[36px]"
           >
             <option value="ALL">All Outcomes</option>
             <option value="WIN">Wins Only</option>
@@ -131,7 +131,7 @@ export default function History() {
           <select 
             value={strategyFilter} 
             onChange={(e) => setStrategyFilter(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] rounded px-2 py-1.5 focus:outline-none focus:border-zinc-700 max-w-[150px] truncate"
+            className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] rounded-lg px-3 py-2 focus:outline-none focus:border-zinc-600 focus:bg-zinc-800 transition-colors cursor-pointer min-h-[36px] max-w-full sm:max-w-[200px] truncate"
           >
             <option value="ALL">All Strategies</option>
             {uniqueStrategies.map(strat => (
@@ -142,73 +142,73 @@ export default function History() {
       )}
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <div className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin mb-3"></div>
-          <p className="text-[11px] text-zinc-500">Loading history...</p>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-5 h-5 border-2 border-zinc-800 border-t-zinc-300 rounded-full animate-spin mb-4"></div>
+          <p className="text-[11px] text-zinc-500 font-medium">Loading history...</p>
         </div>
       ) : error ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-zinc-800 rounded-lg bg-zinc-900/20">
-          <AlertTriangle className="w-6 h-6 text-zinc-600 mb-3" />
-          <p className="text-sm font-medium text-zinc-400">{error}</p>
-          <p className="text-[11px] text-zinc-600 mt-1 mb-4">
+        <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-rose-900/30 rounded-xl bg-rose-950/10">
+          <AlertTriangle className="w-8 h-8 text-rose-500/80 mb-4" />
+          <p className="text-[11px] font-bold text-rose-400 mb-1">Connection Error</p>
+          <p className="text-[10px] text-zinc-500 max-w-[250px] leading-relaxed mb-4">
             Unable to connect to the database or service.
           </p>
           <button
             onClick={refetch}
-            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] rounded transition-colors"
+            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-[10px] font-medium rounded-lg transition-colors"
           >
             Try Again
           </button>
         </div>
       ) : history.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-zinc-800 rounded-lg bg-zinc-900/20">
-          <div className="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center mb-3">
-            <HistoryIcon className="w-4 h-4 text-zinc-600" />
+        <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-zinc-800/80 rounded-xl bg-zinc-950/30">
+          <div className="w-12 h-12 rounded-full bg-zinc-900/50 flex items-center justify-center mb-4 border border-zinc-800/50">
+            <HistoryIcon className="w-5 h-5 text-zinc-500" />
           </div>
-          <p className="text-xs font-medium text-zinc-400">Belum ada history</p>
-          <p className="text-[10px] text-zinc-600 mt-1">
-            Signal yang sudah selesai akan muncul di sini.
+          <p className="text-[11px] font-bold text-zinc-300 mb-1">No Trade History</p>
+          <p className="text-[10px] text-zinc-500 max-w-[280px] leading-relaxed">
+            Completed or closed signals will appear here for evaluation.
           </p>
         </div>
       ) : (
         <div className="space-y-6 pb-20">
           
           {/* Summary Bar */}
-          <div className="grid grid-cols-4 gap-2">
-            <div className="bg-zinc-900/80 border border-zinc-800 rounded-lg p-2.5 flex flex-col items-center justify-center">
-              <span className="text-[8px] text-zinc-500 uppercase tracking-wider mb-1">Win Rate</span>
-              <span className="text-xs font-bold text-zinc-200">{summary.winRate}%</span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 flex flex-col items-center justify-center">
+              <span className="text-[9px] text-zinc-500 font-medium uppercase tracking-wider mb-1.5">Win Rate</span>
+              <span className="text-sm font-bold text-zinc-200">{summary.winRate}%</span>
             </div>
-            <div className="bg-zinc-900/80 border border-zinc-800 rounded-lg p-2.5 flex flex-col items-center justify-center">
-              <span className="text-[8px] text-zinc-500 uppercase tracking-wider mb-1">Total Pips</span>
-              <span className={`text-xs font-bold font-mono ${summary.totalPips > 0 ? "text-emerald-400" : summary.totalPips < 0 ? "text-rose-400" : "text-zinc-200"}`}>
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 flex flex-col items-center justify-center">
+              <span className="text-[9px] text-zinc-500 font-medium uppercase tracking-wider mb-1.5">Total Pips</span>
+              <span className={`text-sm font-bold font-mono ${summary.totalPips > 0 ? "text-emerald-400" : summary.totalPips < 0 ? "text-rose-400" : "text-zinc-200"}`}>
                 {summary.totalPips > 0 ? "+" : ""}{summary.totalPips}
               </span>
             </div>
-            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 flex flex-col items-center justify-center">
-              <span className="text-[8px] text-emerald-500/70 uppercase tracking-wider mb-1">Wins</span>
-              <span className="text-xs font-bold text-emerald-400">{summary.win}</span>
+            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex flex-col items-center justify-center">
+              <span className="text-[9px] text-emerald-500/70 font-medium uppercase tracking-wider mb-1.5">Wins</span>
+              <span className="text-sm font-bold text-emerald-400">{summary.win}</span>
             </div>
-            <div className="bg-rose-500/10 border border-rose-500/20 rounded-lg p-2.5 flex flex-col items-center justify-center">
-              <span className="text-[8px] text-rose-500/70 uppercase tracking-wider mb-1">Losses</span>
-              <span className="text-xs font-bold text-rose-400">{summary.loss}</span>
+            <div className="bg-rose-500/5 border border-rose-500/20 rounded-xl p-4 flex flex-col items-center justify-center">
+              <span className="text-[9px] text-rose-500/70 font-medium uppercase tracking-wider mb-1.5">Losses</span>
+              <span className="text-sm font-bold text-rose-400">{summary.loss}</span>
             </div>
           </div>
 
           {/* Strategy Ranking */}
           {strategyRanking.length > 0 && (
-            <div>
-              <h3 className="text-[10px] font-bold text-zinc-400 mb-2 uppercase tracking-wider flex items-center gap-1.5">
-                <Activity className="w-3 h-3" />
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+              <h3 className="text-[10px] font-bold text-zinc-300 mb-4 uppercase tracking-wider flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-blue-400" />
                 Performance By Strategy
               </h3>
               <div className="space-y-2">
                 {strategyRanking.map((strat, idx) => (
-                  <div key={idx} className="flex items-center justify-between bg-zinc-900/40 border border-zinc-800/50 rounded p-2 text-[10px]">
-                    <span className="text-zinc-300 font-medium truncate pr-2 flex-1">
+                  <div key={idx} className="flex items-center justify-between bg-zinc-950/50 border border-zinc-800/50 rounded-lg p-3 text-[10px] hover:border-zinc-700 transition-colors">
+                    <span className="text-zinc-300 font-medium truncate pr-3 flex-1">
                       {idx + 1}. {strat.name}
                     </span>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-4 shrink-0">
                       <span className="text-zinc-500 w-12 text-right">{strat.wins}/{strat.total} Won</span>
                       <span className={`w-12 text-right font-bold ${strat.winRate >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>{strat.winRate}%</span>
                       <span className={`w-12 text-right font-mono font-bold ${strat.pips > 0 ? 'text-emerald-400' : strat.pips < 0 ? 'text-rose-400' : 'text-zinc-500'}`}>
@@ -222,50 +222,51 @@ export default function History() {
           )}
 
           <div className="space-y-4">
-            <h3 className="text-[10px] font-bold text-zinc-400 mb-2 uppercase tracking-wider flex items-center gap-1.5">
-              <HistoryIcon className="w-3 h-3" />
+            <h3 className="text-[10px] font-bold text-zinc-300 mb-4 uppercase tracking-wider flex items-center gap-1.5">
+              <HistoryIcon className="w-3.5 h-3.5 text-zinc-400" />
               Trade History
             </h3>
             {filteredHistory.length === 0 ? (
-               <div className="text-center py-6 text-[10px] text-zinc-500 italic border border-dashed border-zinc-800 rounded-lg">
-                 No signals match the current filter.
+               <div className="text-center py-10 text-[10px] text-zinc-500 border border-dashed border-zinc-800 rounded-xl bg-zinc-950/30">
+                 <p className="font-medium text-zinc-400 mb-1">No Matches Found</p>
+                 <p>Adjust your filters to see more results.</p>
                </div>
             ) : (
               filteredHistory.slice(0, 100).map((item, idx) => (
               <div
                 key={idx}
                 onClick={() => setSelectedHistory(item)}
-                className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 cursor-pointer hover:border-zinc-600 transition-colors"
+                className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 cursor-pointer hover:border-zinc-700 hover:bg-zinc-900/80 transition-all group"
               >
-                <div className="flex justify-between items-start mb-2">
+                <div className="flex justify-between items-start mb-3">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1.5">
                       <span
-                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${item.direction === "LONG" ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-rose-400 bg-rose-500/10 border-rose-500/20"}`}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${item.direction === "LONG" ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-rose-400 bg-rose-500/10 border-rose-500/20"}`}
                       >
                         {item.direction === "LONG" ? (
-                          <ArrowUpRight className="w-2.5 h-2.5" />
+                          <ArrowUpRight className="w-3 h-3" />
                         ) : (
-                          <ArrowDownRight className="w-2.5 h-2.5" />
+                          <ArrowDownRight className="w-3 h-3" />
                         )}
                         {item.direction}
                       </span>
-                      <span className="text-[11px] font-bold text-zinc-200">
+                      <span className="text-xs font-bold text-zinc-100 group-hover:text-white transition-colors">
                         {item.pair}
                       </span>
                     </div>
-                    <p className="text-[9px] text-zinc-500 line-clamp-1">
+                    <p className="text-[10px] text-zinc-500 font-medium line-clamp-1">
                       {item.strategyName}
                     </p>
                   </div>
                   <div className="text-right">
                     <span
-                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wide border ${item.outcome === "WIN" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : item.outcome === "LOSS" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" : "bg-zinc-800 text-zinc-400 border-zinc-700"}`}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${item.outcome === "WIN" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : item.outcome === "LOSS" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" : "bg-zinc-800 text-zinc-400 border-zinc-700"}`}
                     >
                       {item.outcome === "WIN" ? (
-                        <Target className="w-2.5 h-2.5" />
+                        <Target className="w-3 h-3" />
                       ) : (
-                        <Shield className="w-2.5 h-2.5" />
+                        <Shield className="w-3 h-3" />
                       )}
                       {item.outcome === "WIN"
                         ? "Take Profit"
@@ -276,13 +277,13 @@ export default function History() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-2.5 border-t border-zinc-800/50 text-[9px]">
-                  <div className="flex items-center gap-1.5 text-zinc-500 font-mono">
-                    <Clock className="w-2.5 h-2.5" />
+                <div className="flex items-center justify-between pt-3 border-t border-zinc-800/50 text-[10px]">
+                  <div className="flex items-center gap-1.5 text-zinc-500 font-mono font-medium">
+                    <Clock className="w-3 h-3 text-zinc-600" />
                     {item.closedAt}
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-zinc-500">Net Pips:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-500 font-medium">Net Pips:</span>
                     <span
                       className={`font-mono font-bold ${item.pips > 0 ? "text-emerald-400" : item.pips < 0 ? "text-rose-400" : "text-zinc-400"}`}
                     >

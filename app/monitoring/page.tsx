@@ -25,7 +25,6 @@ import {
   X
 } from "lucide-react";
 import { useFetch } from "@/hooks/use-fetch";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useMemo, useEffect } from "react";
 import { ClientDate } from "@/components/client-date";
 import { getStatusBadge } from "@/lib/utils";
@@ -89,7 +88,7 @@ export default function Monitoring() {
   const getStatusIcon = (status: string) => {
     const s = status?.toLowerCase() || '';
     if (['approved', 'signal_active', 'take_partial', 'finished', 'win', 'valid'].some(x => s === x || s.includes(x))) return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />;
-    if (['active', 'validated', 'live', 'connected', 'healthy'].some(x => s === x || s.includes(x))) return <PlayCircle className="w-3.5 h-3.5 text-blue-500" />;
+    if (['active', 'validated', 'live', 'connected', 'healthy', 'online'].some(x => s === x || s.includes(x))) return <PlayCircle className="w-3.5 h-3.5 text-blue-500" />;
     if (['rejected', 'error', 'disconnected', 'unavailable', 'block', 'invalid'].some(x => s === x || s.includes(x))) return <XCircle className="w-3.5 h-3.5 text-rose-500" />;
     if (['warning', 'stale', 'degraded', 'reconnecting', 'suppressed'].some(x => s === x || s.includes(x))) return <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />;
     if (['expired', 'history', 'awaiting', 'idle', 'cached'].some(x => s === x || s.includes(x))) return <Clock className="w-3.5 h-3.5 text-zinc-500" />;
@@ -98,25 +97,30 @@ export default function Monitoring() {
 
   const getStepDisplayName = (strategyId: string, stepName: string) => {
     const map: Record<string, Record<string, string>> = {
-      'strategy-1': {
+      'strategy-1-smc': {
         'IDLE': 'Idle', 'WAIT_SESSION': 'Session: London', 'WAIT_TREND': 'Trend: HTF', 
         'WAIT_LEVEL': 'Level: Asia High/Low', 'WAIT_SWEEP': 'Liquidity Sweep', 
         'WAIT_CONFIRMATION': 'CHoCH Confirmation', 'WAIT_RETEST': 'Pullback to FVG/OB', 
         'WAIT_AI': 'AI Validation', 'SIGNAL_ACTIVE': 'Signal Active', 'TAKE_PARTIAL': 'Take Partial', 'FINISHED': 'Finished'
       },
-      'strategy-2': {
+      'strategy-2-snd': {
         'IDLE': 'Idle', 'WAIT_TREND': 'Trend: MA50/MA200', 'WAIT_LEVEL': 'Zone: Supply/Demand', 
         'WAIT_SWEEP': 'Touch Zone & Imbalance', 'WAIT_CONFIRMATION': 'Engulfing Pattern', 
         'WAIT_AI': 'AI Validation', 'SIGNAL_ACTIVE': 'Signal Active', 'FINISHED': 'Finished'
       },
-      'strategy-3': {
+      'strategy-3-scalping': {
         'IDLE': 'Idle', 'WAIT_TREND': 'Trend: H1', 'WAIT_RETRACEMENT': 'Retracement (M15)', 
         'WAIT_SWEEP': 'Liquidity Sweep', 'WAIT_PATTERN': 'Double Bottom / Top (M1)', 
         'WAIT_NECKLINE_BREAK': 'Neckline Break', 'WAIT_AI': 'AI Validation', 'SIGNAL_ACTIVE': 'Signal Active', 'FINISHED': 'Finished'
       },
-      'strategy-4': {
+      'strategy-4-news': {
         'IDLE': 'Idle', 'WAIT_NEWS': 'High Impact News', 'WAIT_SWEEP': 'Liquidity Sweep', 
         'WAIT_REJECTION': 'Strong Rejection', 'WAIT_STRUCTURE': 'BOS / Structure Change', 
+        'WAIT_AI': 'AI Validation', 'SIGNAL_ACTIVE': 'Signal Active', 'FINISHED': 'Finished'
+      },
+      'strategy-5-smc-sd-confluence': {
+        'IDLE': 'Idle', 'WAIT_STRUCTURE': 'Market Structure (H1/M15)', 'WAIT_ZONE': 'Zone Detection (M15)',
+        'WAIT_SWEEP': 'Liquidity Sweep (M5/M15)', 'WAIT_CONFIRMATION': 'Entry Trigger (M1/M5)',
         'WAIT_AI': 'AI Validation', 'SIGNAL_ACTIVE': 'Signal Active', 'FINISHED': 'Finished'
       }
     };
@@ -174,45 +178,45 @@ export default function Monitoring() {
 
   return (
     <div className="space-y-6 h-full pb-20 relative">
-      {/* 8) Compact summary bar */}
-      <div className="flex flex-col gap-3 border-b border-zinc-800 pb-4">
-        <div className="flex items-center justify-between">
+      {/* Compact summary bar */}
+      <div className="flex flex-col gap-4 border-b border-zinc-800 pb-5">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
             <h2 className="text-xs font-bold text-zinc-100 flex items-center gap-2">
                 <Activity className="w-4 h-4 text-zinc-400" />
                 SCAN / MONITORING
             </h2>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-1.5">
                 <p className="text-[10px] text-zinc-500">Urutan setup per strategi</p>
                 <span className="text-[10px] text-zinc-500">•</span>
                 <span className="text-[10px] font-medium text-zinc-400">{filteredStrategies?.length || 0} strategies</span>
             </div>
             </div>
-            <div className="flex flex-col items-end gap-2">
-                <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded px-2 py-1">
-                    <Search className="w-3 h-3 text-zinc-500" />
+            <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 min-h-[36px]">
+                    <Search className="w-3.5 h-3.5 text-zinc-500" />
                     <input 
                       type="text" 
                       placeholder="Search strategy..." 
-                      className="bg-transparent border-none outline-none text-[10px] text-zinc-300 w-24 placeholder:text-zinc-600"
+                      className="bg-transparent border-none outline-none text-[10px] text-zinc-300 w-28 md:w-40 placeholder:text-zinc-600 focus:ring-0"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                     />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                     <select 
                         value={filter}
                         onChange={(e) => setFilter(e.target.value)}
-                        className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-[9px] font-medium text-zinc-300 hover:bg-zinc-800 transition-colors focus:outline-none"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-[10px] font-medium text-zinc-300 hover:bg-zinc-800 transition-colors focus:outline-none min-h-[36px]"
                     >
-                        <option value="all">Quick Filter: All</option>
+                        <option value="all">Filter: All</option>
                         <option value="active">Active Only</option>
                         <option value="stopped">Stopped Only</option>
                     </select>
                     <select 
                         value={sortDir}
                         onChange={(e) => setSortDir(e.target.value)}
-                        className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-[9px] font-medium text-zinc-300 hover:bg-zinc-800 transition-colors focus:outline-none"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-[10px] font-medium text-zinc-300 hover:bg-zinc-800 transition-colors focus:outline-none min-h-[36px]"
                     >
                         <option value="desc">Sort: Newest First</option>
                         <option value="asc">Sort: Oldest First</option>
@@ -223,38 +227,38 @@ export default function Monitoring() {
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <div className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin mb-3"></div>
-          <div className="grid grid-cols-1 gap-4 w-full">
-            <Skeleton className="h-64 w-full" />
-            <Skeleton className="h-64 w-full" />
-          </div>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-5 h-5 border-2 border-zinc-800 border-t-zinc-300 rounded-full animate-spin mb-4"></div>
+          <p className="text-[11px] text-zinc-500 font-medium">Scanning strategies...</p>
         </div>
       ) : error ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-zinc-800 rounded-lg bg-zinc-900/20">
-          <AlertTriangle className="w-6 h-6 text-zinc-600 mb-3" />
-          <p className="text-sm font-medium text-zinc-400">{error}</p>
-          <p className="text-[11px] text-zinc-600 mt-1 mb-4">
+        <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-rose-900/30 rounded-xl bg-rose-950/10">
+          <AlertTriangle className="w-8 h-8 text-rose-500/80 mb-4" />
+          <p className="text-[11px] font-bold text-rose-400 mb-1">Connection Error</p>
+          <p className="text-[10px] text-zinc-500 max-w-[250px] leading-relaxed mb-4">
             Unable to connect to the database or service.
           </p>
           <button
             onClick={refetch}
-            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] rounded transition-colors"
+            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-[10px] font-medium rounded-lg transition-colors"
           >
             Try Again
           </button>
         </div>
       ) : filteredStrategies?.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-zinc-800 rounded-lg bg-zinc-900/20">
-          <div className="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center mb-3">
-            <Activity className="w-4 h-4 text-zinc-600" />
+        <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-zinc-800/80 rounded-xl bg-zinc-950/30">
+          <div className="w-12 h-12 rounded-full bg-zinc-900/50 flex items-center justify-center mb-4 border border-zinc-800/50">
+            <Activity className="w-5 h-5 text-zinc-500" />
           </div>
-          <p className="text-xs font-medium text-zinc-400">
-            Tidak ada strategi aktif yang sesuai filter
+          <p className="text-[11px] font-bold text-zinc-300 mb-1">
+            No strategies match filter
+          </p>
+          <p className="text-[10px] text-zinc-500 max-w-[280px] leading-relaxed">
+            Adjust your filters or search term to see more strategies.
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           {filteredStrategies?.slice(0, 50).map((strategy) => {
             const ctx = strategy.context || {};
             const ruleResults = strategy.ruleResults || {};
@@ -274,19 +278,19 @@ export default function Monitoring() {
             return (
               <div
                 key={strategy.id}
-                className={`bg-zinc-900/50 border border-zinc-800 rounded-lg flex flex-col ${strategy.status === "stopped" ? "opacity-60 grayscale-[50%]" : ""}`}
+                className={`bg-zinc-900/50 border border-zinc-800 rounded-xl flex flex-col transition-colors hover:border-zinc-700 hover:bg-zinc-900/80 ${strategy.status === "stopped" ? "opacity-60 grayscale-[50%]" : ""}`}
               >
                 {/* Header (Collapsible) */}
                 <div 
-                    className="p-4 border-b border-zinc-800/50 flex justify-between items-start cursor-pointer hover:bg-zinc-800/30 transition-colors"
+                    className="p-5 border-b border-zinc-800/50 flex justify-between items-start cursor-pointer transition-colors"
                     onClick={() => toggleCollapse(strategy.id)}
                 >
                   <div className="flex-1 pr-4">
-                    <div className="flex items-center gap-2 mb-1.5">
-                        <h3 className="text-[12px] font-bold text-zinc-100 flex items-center gap-1.5">
+                    <div className="flex items-center gap-2.5 mb-2">
+                        <h3 className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
                         {strategy.name || strategy.id}
                         </h3>
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold border uppercase tracking-wider ${getStatusBadge(setupStatus)}`}>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider ${getStatusBadge(setupStatus)}`}>
                         {setupStatus}
                         </span>
                         {strategy.freshness && (
@@ -302,28 +306,28 @@ export default function Monitoring() {
                     </div>
                     
                     {/* Mini Status Chips */}
-                    <div className="flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> TF: <span className="text-zinc-300 font-mono">{strategy.timeframe || 'N/A'}</span></span>
-                        <span className="flex items-center gap-1"><Timer className="w-3 h-3" /> Session: <span className="text-zinc-300">{strategy.session || 'N/A'}</span></span>
-                        <span className="flex items-center gap-1">
-                            {strategy.marketBias === 'buy' ? <TrendingUp className="w-3 h-3 text-emerald-500" /> : strategy.marketBias === 'sell' ? <TrendingDown className="w-3 h-3 text-rose-500" /> : <Activity className="w-3 h-3" />}
-                            Bias: <span className="text-zinc-300 capitalize">{strategy.marketBias || 'N/A'}</span>
+                    <div className="flex flex-wrap items-center gap-3 text-[10px] text-zinc-500">
+                        <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-zinc-600" /> TF: <span className="text-zinc-300 font-mono font-medium">{strategy.timeframe || 'N/A'}</span></span>
+                        <span className="flex items-center gap-1.5"><Timer className="w-3.5 h-3.5 text-zinc-600" /> Session: <span className="text-zinc-300 font-medium">{strategy.session || 'N/A'}</span></span>
+                        <span className="flex items-center gap-1.5">
+                            {strategy.marketBias === 'buy' ? <TrendingUp className="w-3.5 h-3.5 text-emerald-500" /> : strategy.marketBias === 'sell' ? <TrendingDown className="w-3.5 h-3.5 text-rose-500" /> : <Activity className="w-3.5 h-3.5 text-zinc-600" />}
+                            Bias: <span className="text-zinc-300 capitalize font-medium">{strategy.marketBias || 'N/A'}</span>
                         </span>
-                        <span className="flex items-center gap-1"><History className="w-3 h-3" /> Updated: <span className="text-zinc-300 font-mono">{timeStr}</span></span>
+                        <span className="flex items-center gap-1.5"><History className="w-3.5 h-3.5 text-zinc-600" /> Updated: <span className="text-zinc-300 font-mono font-medium">{timeStr}</span></span>
                     </div>
 
                     {/* Progress Indicator */}
-                    <div className="mt-3 flex items-center gap-2">
+                    <div className="mt-4 flex items-center gap-3">
                         <div className="flex-1 h-1.5 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
                             <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${progressPct}%` }}></div>
                         </div>
-                        <span className="text-[9px] text-zinc-500 font-mono w-8 text-right">{Math.round(progressPct)}%</span>
+                        <span className="text-[10px] text-zinc-400 font-mono font-medium w-8 text-right">{Math.round(progressPct)}%</span>
                     </div>
 
                   </div>
                   
                   <div className="flex items-center pt-1">
-                      {isCollapsed ? <ChevronDown className="w-4 h-4 text-zinc-500" /> : <ChevronUp className="w-4 h-4 text-zinc-500" />}
+                      {isCollapsed ? <ChevronDown className="w-5 h-5 text-zinc-500" /> : <ChevronUp className="w-5 h-5 text-zinc-500" />}
                   </div>
                 </div>
 
@@ -480,9 +484,9 @@ export default function Monitoring() {
                                 <h4 className="text-[10px] font-semibold text-zinc-400 mb-2 flex items-center gap-1.5 uppercase tracking-wider">
                                     <Zap className="w-3 h-3" /> AI Validation
                                 </h4>
-                                <div className={`p-3 rounded-md border ${strategy.aiDecision === 'approve' ? 'bg-emerald-500/10 border-emerald-500/20' : strategy.aiDecision === 'reject' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-blue-500/10 border-blue-500/20'}`}>
+                                <div className={`p-3 rounded-md border ${strategy.aiDecision?.toLowerCase() === 'approved' ? 'bg-emerald-500/10 border-emerald-500/20' : strategy.aiDecision?.toLowerCase() === 'rejected' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-blue-500/10 border-blue-500/20'}`}>
                                     <div className="flex items-center justify-between mb-1">
-                                        <span className={`text-[10px] font-bold uppercase ${strategy.aiDecision === 'approve' ? 'text-emerald-400' : strategy.aiDecision === 'reject' ? 'text-rose-400' : 'text-blue-400'}`}>
+                                        <span className={`text-[10px] font-bold uppercase ${strategy.aiDecision?.toLowerCase() === 'approved' ? 'text-emerald-400' : strategy.aiDecision?.toLowerCase() === 'rejected' ? 'text-rose-400' : 'text-blue-400'}`}>
                                             Decision: {strategy.aiDecision}
                                         </span>
                                     </div>

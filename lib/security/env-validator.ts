@@ -21,8 +21,8 @@ export function validateEnvironment(): void {
     const missingRecommended = recommendedVars.filter(v => !getEnv(v));
 
     if (missingRequired.length > 0) {
-        logger.error(`CRITICAL: Missing required environment variables: ${missingRequired.join(', ')}`);
-        // We shouldn't necessarily crash because AI Studio might inject them later, but we log it as error
+        logger.warn(`CRITICAL: Missing required environment variables: ${missingRequired.join(', ')}`);
+        logger.warn('System will start in DEGRADED mode.');
     }
 
     if (missingRecommended.length > 0) {

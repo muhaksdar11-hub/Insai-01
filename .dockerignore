@@ -4,7 +4,6 @@ node_modules
 .env*
 !.env.example
 npm-debug.log
-README.md
 Dockerfile
 .dockerignore
 .railwayignore
@@ -12,6 +11,12 @@ railway.toml
 
 # Python cache and environment
 .venv
+venv
+pyenv
+python-engine/venv
 __pycache__
+python-engine/__pycache__
 *.pyc
 tsconfig.tsbuildinfo
+server.pid
+

@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger';
 import { getTelegramBot } from './telegram-bot';
 import { getSupabaseClient } from '../supabase/client';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 export interface AlertPayload {
   alert_key: string;

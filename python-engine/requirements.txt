@@ -2,5 +2,6 @@ fastapi
 uvicorn
 pydantic
 numpy
-pandas
-scipy
+python-dotenv
+redis
+redis

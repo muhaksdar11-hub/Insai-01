@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export function getStatusBadge(status: string) {
   const s = status?.toLowerCase() || '';
-  if (['approved', 'signal_active', 'take_partial', 'finished', 'win', 'valid', 'tp tercapai', 'tp1 hit', 'tp2 hit', 'tp3 hit', 'healthy'].some(x => s === x || s.includes(x))) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+  if (['approved', 'signal_active', 'take_partial', 'finished', 'win', 'valid', 'tp tercapai', 'tp1 hit', 'tp2 hit', 'tp3 hit', 'healthy', 'online'].some(x => s === x || s.includes(x))) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
   if (['active', 'validated', 'live', 'connected'].some(x => s === x || s.includes(x))) return "text-blue-400 bg-blue-500/10 border-blue-500/20";
   if (['rejected', 'error', 'disconnected', 'unavailable', 'block', 'invalid', 'sl tercapai', 'failed'].some(x => s === x || s.includes(x))) return "text-rose-400 bg-rose-500/10 border-rose-500/20";
   if (['warning', 'stale', 'degraded', 'reconnecting', 'suppressed'].some(x => s === x || s.includes(x))) return "text-amber-400 bg-amber-500/10 border-amber-500/20";

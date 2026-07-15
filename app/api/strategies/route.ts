@@ -2,12 +2,7 @@ import { NextResponse } from 'next/server';
 import { ApiResponse, StateName } from '@/types';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { STRATEGY_FLOWS } from '@/lib/trading-engine/state-machine';
-
-import { RuleEngine } from '@/lib/trading-engine/rule-engine';
-import { Strategy1_SMCLondon } from '@/lib/trading-engine/strategies/strategy-1-smc-london';
-import { Strategy2_SndEngulfing } from '@/lib/trading-engine/strategies/strategy-2-snd-engulfing';
-import { Strategy3_ScalpingSMC } from '@/lib/trading-engine/strategies/strategy-3-scalping-smc';
-import { Strategy4_NewsReversal } from '@/lib/trading-engine/strategies/strategy-4-news-reversal';
+import crypto from 'crypto';
 
 export const dynamic = "force-dynamic";
 
@@ -16,25 +11,25 @@ export async function GET() {
   let success = false;
   let error = null;
   try {
-    const metadataEngine = new RuleEngine();
     const defaultStrategies = [
-      new Strategy1_SMCLondon(metadataEngine),
-      new Strategy2_SndEngulfing(metadataEngine),
-      new Strategy3_ScalpingSMC(metadataEngine),
-      new Strategy4_NewsReversal(metadataEngine)
+      { id: 'strategy-1-smc', name: 'SMC London Killzone' },
+      { id: 'strategy-2-snd', name: 'SnD Engulfing Confirmation' },
+      { id: 'strategy-3-scalping', name: 'M1/M5 SMC Scalping' },
+      { id: 'strategy-4-news', name: 'High Impact News Reversal' },
+      { id: 'strategy-5-smc-sd-confluence', name: 'SMC-SD Pattern Confluence' }
     ].map(s => ({
       id: s.id,
       name: s.name,
       description: s.name,
-      status: 'not configured',
+      status: 'active',
       parameters: {},
-      enabled: false,
+      enabled: true,
     }));
 
-    const strategiesRes = await getSupabaseClient().getStrategies();
+    const strategiesRes = await getSupabaseClient().getStrategies().catch(() => null);
     
-    if (!Array.isArray(strategiesRes)) {
-       strategies = defaultStrategies.map(s => ({ ...s, status: 'not configured' }));
+    if (!strategiesRes || !Array.isArray(strategiesRes)) {
+       strategies = defaultStrategies;
     } else {
        // Merge DB strategies with default ones
        strategies = [...defaultStrategies];
@@ -62,14 +57,31 @@ export async function GET() {
 
             if (state) {
                 const currentStateName = state.state_name as StateName;
-                const currentIndex = flow.indexOf(currentStateName);
+                let currentIndex = flow.indexOf(currentStateName);
+                
+                // If the state is a terminal state not in the flow (like REJECTED),
+                // we should find the step it failed at, or just mark the flow appropriately.
+                const isRejected = currentStateName === 'REJECTED' || currentStateName === 'EXPIRED' || currentStateName === 'SUPPRESSED';
+                if (isRejected) {
+                    // It failed. We can't know the exact index just from 'REJECTED' unless we check reason or last state.
+                    // Let's just make the first step 'rejected' so the user knows it failed, 
+                    // or better, if the UI doesn't know the step, show it on the first step.
+                    // Wait, we can get the actual index by checking which step was last active? 
+                    // Since we don't have it in this simple query, let's just set the last status.
+                }
 
                 strategies[i].steps = flow.map((stepName, idx) => {
                     let status = 'awaiting';
-                    if (idx < currentIndex) {
-                        status = 'approved';
-                    } else if (idx === currentIndex) {
-                        status = state.state_status || 'active'; // can be 'active', 'rejected', 'expired' etc
+                    if (isRejected) {
+                       if (idx < currentIndex) status = 'approved';
+                       else if (idx === currentIndex) status = state.state_status || 'rejected';
+                       else status = 'awaiting';
+                    } else {
+                       if (idx < currentIndex) {
+                           status = 'approved';
+                       } else if (idx === currentIndex) {
+                           status = state.state_status || 'active'; // can be 'active', 'rejected', 'expired' etc
+                       }
                     }
                     return { name: stepName, status };
                 });

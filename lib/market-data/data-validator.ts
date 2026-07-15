@@ -118,10 +118,10 @@ export class DataValidator {
   }
 
   private getTimeframeMs(timeframe: string): number {
-    const match = timeframe.match(/([M|H|D|W|MN])(\d+)?/);
+    const match = timeframe.match(/^(MN|M|H|D|W)(\d+)?$/i);
     if (!match) return 0;
     
-    const unit = match[1];
+    const unit = match[1].toUpperCase();
     const val = parseInt(match[2] || '1');
     
     switch (unit) {

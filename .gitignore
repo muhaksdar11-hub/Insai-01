@@ -7,3 +7,8 @@ coverage/
 .env*
 !.env.example
 tsconfig.tsbuildinfo
+server.pid
+pyenv/
+venv/
+python-engine/venv/
+python-engine/__pycache__/

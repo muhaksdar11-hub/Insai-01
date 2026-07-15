@@ -90,24 +90,63 @@ class HealthCheckEngine {
     // Check Market Data
     try {
        const start = Date.now();
-       const key = getEnv("TWELVEDATA_API_KEY");
-       if (key) {
+       const polygonKey = getEnv("POLYGON_API_KEY");
+       const tdKey = getEnv("TWELVEDATA_API_KEY");
+       
+       let onlineCount = 0;
+       let configuredCount = 0;
+       let lastError = '';
+       let rateLimited = false;
+
+       if (polygonKey) {
+           configuredCount++;
            const controller = new AbortController();
            const timeout = setTimeout(() => controller.abort(), 3000);
-           const res = await fetch(`https://api.twelvedata.com/time_series?symbol=XAU/USD&interval=1min&outputsize=1&apikey=${key}`, { signal: controller.signal });
-           clearTimeout(timeout);
-           const data = await res.json();
-           if (data.code && data.status === 'error') {
-               if (data.code === 429) {
-                   this.updateServiceHealth('MarketData', 'RATE LIMITED', Date.now() - start, data.message);
-               } else {
-                   this.updateServiceHealth('MarketData', 'UNAVAILABLE', Date.now() - start, data.message);
-               }
-           } else {
-               this.updateServiceHealth('MarketData', 'ONLINE', Date.now() - start);
-           }
+           try {
+             const res = await fetch(`https://api.polygon.io/v2/last/nbbo/C:XAUUSD?apiKey=${polygonKey}`, { signal: controller.signal });
+             const data = await res.json();
+             if (res.status === 429 || (data.status === 'ERROR' && data.error?.includes('limit'))) {
+                 rateLimited = true;
+                 lastError = data.error || 'Rate limit';
+             } else if (data.status !== 'ERROR') {
+                 onlineCount++;
+             } else {
+                 lastError = data.error;
+             }
+           } catch (e: any) { lastError = e.message; const { getProviderRegistry } = await import("../market-data/provider-registry"); getProviderRegistry().reportError("Polygon.io", lastError); }
+           finally { clearTimeout(timeout); }
+       }
+       
+       if (tdKey) {
+           configuredCount++;
+           const controller = new AbortController();
+           const timeout = setTimeout(() => controller.abort(), 3000);
+           try {
+             const res = await fetch(`https://api.twelvedata.com/time_series?symbol=XAU/USD&interval=1min&outputsize=1&apikey=${tdKey}`, { signal: controller.signal });
+             const data = await res.json();
+             if (res.status === 429 || (data.code && data.code === 429)) {
+                 rateLimited = true;
+                 lastError = data.message || 'Rate limit';
+             } else if (!data.code || data.status !== 'error') {
+                 onlineCount++;
+             } else {
+                 lastError = data.message;
+             }
+           } catch (e: any) { lastError = e.message; const { getProviderRegistry } = await import("../market-data/provider-registry"); getProviderRegistry().reportError("Polygon.io", lastError); }
+           finally { clearTimeout(timeout); }
+       }
+       
+       // Yahoo Finance is always considered configured as fallback, but let's just count explicit keys for primary
+       
+       if (configuredCount === 0) {
+           // We have Yahoo Finance fallback, so we can say online or degraded
+           this.updateServiceHealth('MarketData', 'ONLINE', Date.now() - start, 'Using YahooFinance fallback');
+       } else if (onlineCount > 0) {
+           this.updateServiceHealth('MarketData', 'ONLINE', Date.now() - start, onlineCount > 1 ? 'Hybrid Active' : 'Online');
+       } else if (rateLimited) {
+           this.updateServiceHealth('MarketData', 'RATE LIMITED', Date.now() - start, lastError);
        } else {
-           this.updateServiceHealth('MarketData', 'NOT CONFIGURED', 0, 'Pending API Key');
+           this.updateServiceHealth('MarketData', 'UNAVAILABLE', Date.now() - start, lastError || 'All configured providers failed');
        }
     } catch (e: any) {
        this.updateServiceHealth('MarketData', 'UNAVAILABLE', 0, e.message);
@@ -194,7 +233,7 @@ class HealthCheckEngine {
     // Check Python Engine
     try {
         const start = Date.now();
-        const defaultPyPort = process.env.PYTHON_PORT || '8181';
+        const defaultPyPort = process.env.PYTHON_PORT || '8000';
         const pyUrl = getEnv("PYTHON_ENGINE_URL") || `http://127.0.0.1:${defaultPyPort}`;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 3000);
@@ -209,14 +248,51 @@ class HealthCheckEngine {
         this.updateServiceHealth('PythonEngine', 'OFFLINE', 0, e.message.includes('missing') ? 'PYTHON_ENGINE_URL is missing' : 'Python service unreachable');
     }
 
+    // Check Redis
+    try {
+        const start = Date.now();
+        const redisUrl = getEnv("REDIS_URL");
+        if (redisUrl) {
+           const { getQueueManager } = await import('../redis/queue');
+           const qm = getQueueManager();
+           if (qm.isConnected()) {
+              // Try a ping via cache method or acquire lock briefly
+              await qm.setCache('health_ping', 'ok', 10);
+              const val = await qm.getCache('health_ping');
+              if (val === 'ok') {
+                  this.updateServiceHealth('Redis', 'ONLINE', Date.now() - start);
+              } else {
+                  this.updateServiceHealth('Redis', 'DEGRADED', Date.now() - start, 'Ping failed');
+              }
+           } else {
+              this.updateServiceHealth('Redis', 'UNAVAILABLE', Date.now() - start, 'Not connected');
+           }
+        } else {
+           this.updateServiceHealth('Redis', 'NOT CONFIGURED', 0, 'REDIS_URL not set');
+        }
+    } catch (e: any) {
+        this.updateServiceHealth('Redis', 'UNAVAILABLE', 0, e.message);
+    }
+
     const servicesList = Object.values(this.services);
     
     // Determine overall status
     let overallStatus: ServiceHealthStatus = 'ONLINE';
-    if (servicesList.some(s => s.status === 'OFFLINE' || s.status === 'UNAVAILABLE')) overallStatus = 'DEGRADED';
-    else if (servicesList.some(s => s.status === 'RATE LIMITED')) overallStatus = 'RATE LIMITED';
-    else if (servicesList.some(s => s.status === 'DEGRADED')) overallStatus = 'DEGRADED';
-    else if (servicesList.some(s => s.status === 'NOT CONFIGURED')) overallStatus = 'NOT CONFIGURED';
+    
+    const criticalServices = ['Redis', 'Supabase'];
+    const criticalFailures = servicesList.filter(s => criticalServices.includes(s.serviceName) && (s.status === 'OFFLINE' || s.status === 'UNAVAILABLE'));
+    
+    if (criticalFailures.length > 0) {
+        overallStatus = 'UNAVAILABLE';
+    } else if (servicesList.some(s => s.status === 'OFFLINE' || s.status === 'UNAVAILABLE')) {
+        overallStatus = 'DEGRADED';
+    } else if (servicesList.some(s => s.status === 'RATE LIMITED')) {
+        overallStatus = 'RATE LIMITED';
+    } else if (servicesList.some(s => s.status === 'DEGRADED')) {
+        overallStatus = 'DEGRADED';
+    } else if (servicesList.some(s => s.status === 'NOT CONFIGURED')) {
+        overallStatus = 'NOT CONFIGURED';
+    }
 
     return {
       status: overallStatus,

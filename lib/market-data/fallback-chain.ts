@@ -15,7 +15,7 @@ export class FallbackChain<T> {
   ): Promise<R> {
     const errors: Error[] = [];
     for (const { provider, name } of this.providers) {
-      if (getProviderRegistry().getProviderHealth(name)?.healthStatus === 'error') {
+      if (getProviderRegistry().getProviderHealth(name)?.healthStatus === 'UNAVAILABLE' || getProviderRegistry().getProviderHealth(name)?.healthStatus === 'RATE LIMITED') {
         const health = getProviderRegistry().getProviderHealth(name);
         if (health?.circuitBreakerStatus === 'open') {
            logger.warn(`Skipping provider ${name} due to open circuit breaker for ${context}`);
@@ -30,11 +30,13 @@ export class FallbackChain<T> {
       } catch (error: any) {
         if (error.message.includes('not configured')) {
           logger.warn(`Provider ${name} skipped for ${context}: ${error.message}`);
+        } else if (error.message.includes('not supported by')) {
+          // Silent skip for unsupported symbols
         } else {
           logger.error(`Provider ${name} failed for ${context}: ${error.message}`);
         }
         errors.push(error);
-        if (!error.message.includes('not configured')) {
+        if (!error.message.includes('not configured') && !error.message.includes('not supported by')) {
           logger.warn(`Falling back to next provider for ${context}...`);
         }
       }
@@ -57,8 +59,10 @@ export class FallbackChain<T> {
         if (errorMessage.includes('Rate Limited') || errorMessage.includes('429')) {
           (fallbackValue as any).status = 'rate_limited';
         } else if (errorMessage.includes('Unavailable')) {
-          (fallbackValue as any).status = 'provider_unavailable';
-        } else if (!errorMessage.includes('not configured')) {
+          (fallbackValue as any).status = 'unavailable';
+        } else if (errorMessage.includes('not configured')) {
+          (fallbackValue as any).status = 'not_configured';
+        } else {
           (fallbackValue as any).status = 'error';
         }
       }

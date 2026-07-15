@@ -1,10 +1,13 @@
 import { MarketSnapshot, Candle, NewsEvent, CalendarEvent } from '@/types';
 import { TwelveDataProvider } from './providers/twelvedata';
-import { YahooFinanceProvider } from './providers/yahoofinance';
+import { PolygonProvider } from './providers/polygon';
 import { NewsApiProvider } from './providers/newsapi';
+import { YahooFinanceProvider } from './providers/yahoofinance';
+import { TwitterProvider } from './providers/twitter';
 import { ForexFactoryProvider } from './providers/forexfactory';
 import { getProviderRegistry } from './provider-registry';
 import { logger } from '../utils/logger';
+import { getQueueManager } from '../redis/queue';
 import { FallbackChain } from './fallback-chain';
 import { PriceProvider, NewsProvider, CalendarProvider } from './types';
 import { dataValidator } from './data-validator';
@@ -24,27 +27,44 @@ export class MarketDataService {
     this.calendarChain = new FallbackChain<CalendarProvider>();
 
     // Fallback chain for price
-    // 1. Primary: TwelveData (status: needs verification until real)
+    // 1. Polygon.io (Primary if API key present)
+    this.priceChain.addProvider(new PolygonProvider(), 'Polygon.io');
+    // 2. TwelveData (Secondary if API key present)
     this.priceChain.addProvider(new TwelveDataProvider(), 'TwelveData');
-    // 2. Secondary: YahooFinance (free, active)
+    // 3. Yahoo Finance (Fallback if all else fails)
     this.priceChain.addProvider(new YahooFinanceProvider(), 'YahooFinance');
 
     // Fallback chain for news
     this.newsChain.addProvider(new NewsApiProvider(), 'NewsAPI');
+    this.newsChain.addProvider(new TwitterProvider(), 'Twitter Bearer');
     
     // Fallback chain for calendar
     this.calendarChain.addProvider(new ForexFactoryProvider(), 'ForexFactory');
   }
 
   async getLatestPrice(symbol: string, freshnessWindowMs: number = 15000): Promise<MarketSnapshot> {
-    const cached = this.priceCache.get(symbol);
     const now = Date.now();
+    let cachedData = null;
 
-    if (cached && cached.expiresAt > now) {
+    // Try Redis cache first
+    try {
+      const redisCached = await getQueueManager().getCache<{ data: MarketSnapshot, expiresAt: number }>(`price:${symbol}`);
+      if (redisCached && redisCached.expiresAt > now) {
+        cachedData = redisCached;
+      }
+    } catch (e) {
+      // Fallback to local map
+      const localCached = this.priceCache.get(symbol);
+      if (localCached && localCached.expiresAt > now) {
+        cachedData = localCached;
+      }
+    }
+
+    if (cachedData) {
       // Re-evaluate freshness based on the requested window
-      const snapshotTime = new Date(cached.data.timestamp).getTime();
+      const snapshotTime = new Date(cachedData.data.timestamp).getTime();
       const freshness = (now - snapshotTime > freshnessWindowMs) ? 'stale' : 'cached';
-      return { ...cached.data, freshness };
+      return { ...cachedData.data, freshness };
     }
 
     const fallbackSnapshot = {
@@ -72,24 +92,40 @@ export class MarketDataService {
     } else {
        snapshot.freshness = 'live';
     }
-    this.priceCache.set(symbol, {
+    
+    const cacheEntry = {
       data: snapshot,
       expiresAt: now + this.PRICE_CACHE_TTL_MS
-    });
+    };
+
+    this.priceCache.set(symbol, cacheEntry);
+    getQueueManager().setCache(`price:${symbol}`, cacheEntry, Math.ceil(this.PRICE_CACHE_TTL_MS / 1000)).catch(() => {});
 
     return snapshot;
   }
 
   private candleCache: Map<string, { data: Candle[], expiresAt: number }> = new Map();
-  private readonly CANDLE_CACHE_TTL_MS = 5000; // 5 seconds for candles within the same cycle
+  private readonly CANDLE_CACHE_TTL_MS = 60000; // 60 seconds (1 minute) for candles, M15 doesn't close that fast
 
   async getCandles(symbol: string, timeframe: string, limit: number = 100): Promise<Candle[]> {
     const cacheKey = `${symbol}-${timeframe}-${limit}`;
     const now = Date.now();
-    const cached = this.candleCache.get(cacheKey);
-    
-    if (cached && cached.expiresAt > now) {
-      return cached.data;
+    let cachedData = null;
+
+    try {
+      const redisCached = await getQueueManager().getCache<{ data: Candle[], expiresAt: number }>(`candles:${cacheKey}`);
+      if (redisCached && redisCached.expiresAt > now) {
+        cachedData = redisCached.data;
+      }
+    } catch (e) {
+      const localCached = this.candleCache.get(cacheKey);
+      if (localCached && localCached.expiresAt > now) {
+        cachedData = localCached.data;
+      }
+    }
+
+    if (cachedData) {
+      return cachedData;
     }
 
     const fallbackCandles = Object.assign([], {
@@ -105,26 +141,93 @@ export class MarketDataService {
     );
 
     if (!data.status || data.status !== 'not_configured') {
-      this.candleCache.set(cacheKey, {
+      const cacheEntry = {
         data,
         expiresAt: now + this.CANDLE_CACHE_TTL_MS
-      });
+      };
+      this.candleCache.set(cacheKey, cacheEntry);
+      getQueueManager().setCache(`candles:${cacheKey}`, cacheEntry, Math.ceil(this.CANDLE_CACHE_TTL_MS / 1000)).catch(() => {});
     }
 
     return data;
   }
 
+  private newsCache: { data: NewsEvent[], expiresAt: number } | null = null;
+  private readonly NEWS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
   async getLatestNews(): Promise<NewsEvent[]> {
+    const now = Date.now();
+    let cachedData = null;
+
+    try {
+      const redisCached = await getQueueManager().getCache<{ data: NewsEvent[], expiresAt: number }>('latest_news');
+      if (redisCached && redisCached.expiresAt > now) {
+        cachedData = redisCached.data;
+      }
+    } catch (e) {
+      if (this.newsCache && this.newsCache.expiresAt > now) {
+        cachedData = this.newsCache.data;
+      }
+    }
+
+    if (cachedData) {
+      return cachedData;
+    }
+
     const fallbackNews = Object.assign([], {
       status: 'not_configured',
       available: false,
-      reason: 'NEWS_API_KEY is not configured'
+      reason: 'No news providers configured'
     });
-    return this.newsChain.execute(
-      (p) => p.getLatestNews(),
-      'getLatestNews',
-      fallbackNews
-    );
+    
+    const executeProvider = async (provider: any) => {
+       const health = getProviderRegistry().getProviderHealth(provider.name);
+       if ((health?.healthStatus === 'UNAVAILABLE' || health?.healthStatus === 'RATE LIMITED') && health?.circuitBreakerStatus === 'open') {
+          throw new Error(`Circuit breaker open for ${provider.name}`);
+       }
+       return await provider.getLatestNews();
+    };
+
+    // Fetch from all news providers in parallel
+    const newsApiProvider = new NewsApiProvider();
+    const twitterProvider = new TwitterProvider();
+    
+    const results = await Promise.allSettled([
+      executeProvider(newsApiProvider),
+      executeProvider(twitterProvider)
+    ]);
+    
+    let allNews: NewsEvent[] = [];
+    
+    if (results[0].status === 'fulfilled' && !results[0].value.hasOwnProperty('status')) {
+      allNews.push(...results[0].value);
+    }
+    
+    if (results[1].status === 'fulfilled' && !results[1].value.hasOwnProperty('status')) {
+      allNews.push(...results[1].value);
+    }
+    
+    if (allNews.length === 0) {
+      return fallbackNews;
+    }
+    
+    // Dedup and sort
+    const seen = new Set();
+    allNews = allNews.filter(n => {
+      const key = n.title.toLowerCase().trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+
+    const cacheEntry = {
+        data: allNews,
+        expiresAt: now + this.NEWS_CACHE_TTL_MS
+    };
+    this.newsCache = cacheEntry;
+    getQueueManager().setCache('latest_news', cacheEntry, Math.ceil(this.NEWS_CACHE_TTL_MS / 1000)).catch(() => {});
+    
+    return allNews;
   }
 
   private calendarCache: { data: CalendarEvent[], expiresAt: number } | null = null;
@@ -132,8 +235,21 @@ export class MarketDataService {
 
   async getCalendarEvents(): Promise<CalendarEvent[]> {
     const now = Date.now();
-    if (this.calendarCache && this.calendarCache.expiresAt > now) {
-      return this.calendarCache.data;
+    let cachedData = null;
+
+    try {
+      const redisCached = await getQueueManager().getCache<{ data: CalendarEvent[], expiresAt: number }>('calendar_events');
+      if (redisCached && redisCached.expiresAt > now) {
+        cachedData = redisCached.data;
+      }
+    } catch (e) {
+      if (this.calendarCache && this.calendarCache.expiresAt > now) {
+        cachedData = this.calendarCache.data;
+      }
+    }
+
+    if (cachedData) {
+      return cachedData;
     }
 
     const fallbackCalendar = Object.assign([], {
@@ -149,22 +265,33 @@ export class MarketDataService {
     
     // Only cache if it's an actual successful array (no status field)
     if (!data.hasOwnProperty('status')) {
-        this.calendarCache = {
+        const cacheEntry = {
             data,
             expiresAt: now + this.CALENDAR_CACHE_TTL_MS
         };
+        this.calendarCache = cacheEntry;
+        getQueueManager().setCache('calendar_events', cacheEntry, Math.ceil(this.CALENDAR_CACHE_TTL_MS / 1000)).catch(() => {});
     }
     
     return data;
   }
 
   async getContextData(symbol: string, timeframe: string, freshnessWindowMs: number = 15000) {
-    const [price, news, calendar, candles] = await Promise.all([
+    const [price, news, calendar, candles, dxy, us10y] = await Promise.all([
       this.getLatestPrice(symbol, freshnessWindowMs),
       this.getLatestNews(),
       this.getCalendarEvents(),
-      this.getCandles(symbol, timeframe, 250)
+      this.getCandles(symbol, timeframe, 250),
+      this.getLatestPrice('DXY', freshnessWindowMs).catch(() => ({ status: 'error', reason: 'Failed to fetch DXY' })),
+      this.getLatestPrice('US10Y', freshnessWindowMs).catch(() => ({ status: 'error', reason: 'Failed to fetch US10Y' }))
     ]);
+    
+    // COT Data - Requires CFTC API or Premium Data Provider (e.g., Quandl)
+    const cotData = {
+      status: 'not_configured',
+      available: false,
+      reason: 'COT data requires premium provider integration (CFTC / Quandl)'
+    };
     
     // VALIDATION LAYER
     if (candles && Array.isArray(candles) && !candles.hasOwnProperty('status')) {
@@ -175,9 +302,15 @@ export class MarketDataService {
        }
     }
     
-    if (price && price.price !== null) {
-       // If spread is available, we could validate it here. Let's assume price has bid/ask or spread if real provider.
-       // Without bid/ask, we will skip spread validation for now.
+    if (price && price.price !== null && candles && Array.isArray(candles) && candles.length > 0 && !candles.hasOwnProperty('status')) {
+       // Update last candle with latest price for real-time responsiveness
+       const lastCandle = candles[candles.length - 1];
+       lastCandle.close = price.price;
+       if (price.price > lastCandle.high) lastCandle.high = price.price;
+       if (price.price < lastCandle.low) lastCandle.low = price.price;
+       
+       // Force a fresh timestamp so the engine detects the incremental change
+       lastCandle.timestamp = price.timestamp || new Date().toISOString(); 
     }
 
     return {
@@ -188,6 +321,11 @@ export class MarketDataService {
       news,
       calendar,
       candles,
+      correlations: {
+          dxy,
+          us10y,
+          cotData
+      },
       health: getProviderRegistry().getAllHealth()
     };
   }

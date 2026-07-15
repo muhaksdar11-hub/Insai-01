@@ -24,9 +24,10 @@ export class NewsApiProvider implements NewsProvider {
 
     try {
       const res = await fetchWithRetry(`https://newsapi.org/v2/everything?q=gold+OR+XAUUSD+OR+forex&language=en&sortBy=publishedAt&pageSize=5&apiKey=${key}`, {
-        timeoutMs: 5000,
+        timeoutMs: 3000,
         retries: 2
       });
+      if (res.status === 429) throw new Error('Rate Limited (429)');
       const data = await res.json();
       
       if (data.status !== 'ok') {
@@ -38,7 +39,7 @@ export class NewsApiProvider implements NewsProvider {
         id: article.url,
         title: article.title,
         source: article.source.name,
-        timestamp: article.publishedAt,
+        publishedAt: article.publishedAt,
         impact: 'low', // default impact
         currency: 'USD'
       }));

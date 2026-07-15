@@ -8,7 +8,7 @@ import {
     EqualHighLowEngine,
     KillzoneEngine
 } from '../mcp/engines/smc-engines';
-import { findSweeps, detectEngulfing, detectDoubleTopBottom, analyzeStructure, findBOS } from './indicators';
+import { findSweeps, detectEngulfing, detectDoubleTopBottom, analyzeStructure, findBOS, calculateATR } from './indicators';
 
 export interface RuleEvaluationContext {
   symbol: string;
@@ -20,42 +20,60 @@ export interface RuleEvaluationContext {
   correlationId?: string;
 }
 
-export class RuleEngine {
-  // --- KILLZONE / SESSION RULE ---
-  evaluateSession(context: RuleEvaluationContext, targetSession: 'london' | 'newyork' | 'all'): RuleResult {
+// ==========================================
+// MODULAR RULES (SOLID Principles)
+// ==========================================
+
+export interface IRule {
+  id: string;
+  evaluate(context: RuleEvaluationContext, ...args: any[]): RuleResult;
+}
+
+export abstract class BaseRule implements IRule {
+  abstract id: string;
+  abstract evaluate(context: RuleEvaluationContext, ...args: any[]): RuleResult;
+
+  protected createResult(status: RuleStatus, evidence: Record<string, any> = {}, invalidations: string[] = []): RuleResult {
+    return {
+      ruleId: this.id,
+      status,
+      evidence,
+      invalidations,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+export class SessionRule extends BaseRule {
+  id = 'rule_session';
+  evaluate(context: RuleEvaluationContext, targetSession: 'london' | 'newyork' | 'all'): RuleResult {
     try {
       const timestamp = context.timestamp || new Date().toISOString();
       const currentZone = KillzoneEngine.evaluate(timestamp);
       
-      let inSession = false;
-      if (targetSession === 'all') {
-         inSession = true;
-      } else {
-         inSession = currentZone === targetSession;
-      }
+      const inSession = targetSession === 'all' || currentZone === targetSession;
 
       if (inSession) {
-        return this.createResult('rule_session', 'valid', { session: currentZone, target: targetSession }, []);
-      } else {
-        return this.createResult('rule_session', 'invalid', { session: currentZone, target: targetSession }, [`Time window outside of target session ${targetSession}`]);
+        return this.createResult('valid', { session: currentZone, target: targetSession });
       }
+      return this.createResult('invalid', { session: currentZone, target: targetSession }, [`Time window outside of target session ${targetSession}`]);
     } catch (e: any) {
-      return this.createResult('rule_session', 'unknown', {}, [`Session parsing error: ${e.message}`]);
+      return this.createResult('unknown', {}, [`Session parsing error: ${e.message}`]);
     }
   }
+}
 
-  // --- TREND RULE ---
-  evaluateTrend(context: RuleEvaluationContext, _timeframe?: string): RuleResult {
+export class TrendRule extends BaseRule {
+  id = 'rule_trend';
+  evaluate(context: RuleEvaluationContext): RuleResult {
     const candles = context.candles || context.marketData?.candles || [];
-    if (candles.length < 200) {
-      return this.createResult('rule_trend', 'unknown', {}, ['Insufficient candles for MA200 evaluation']);
-    }
+    if (candles.length < 200) return this.createResult('unknown', {}, ['Insufficient candles for MA200 evaluation']);
 
     const ma50 = MAEngine.evaluate(candles, 50);
     const ma200 = MAEngine.evaluate(candles, 200);
     const structure = analyzeStructure(candles, 15, 15);
 
-    if (!ma50 || !ma200) return this.createResult('rule_trend', 'unknown', {}, ['MA calculation failed']);
+    if (!ma50 || !ma200) return this.createResult('unknown', {}, ['MA calculation failed']);
 
     let trend = 'sideways';
     let invalidations = [];
@@ -66,16 +84,18 @@ export class RuleEngine {
       trend = 'bearish';
     } else {
       invalidations.push('Struktur HTF berlawanan atau MA flat (sideways)');
-      return this.createResult('rule_trend', 'invalid', { trend, ma50, ma200, structure: structure.trend }, invalidations);
+      return this.createResult('invalid', { trend, ma50, ma200, structure: structure.trend }, invalidations);
     }
     
-    return this.createResult('rule_trend', 'valid', { trend, ma50, ma200, structure: structure.trend }, []);
+    return this.createResult('valid', { trend, ma50, ma200, structure: structure.trend });
   }
+}
 
-  // --- LIQUIDITY SWEEP RULE ---
-  evaluateLiquiditySweep(context: RuleEvaluationContext): RuleResult {
+export class LiquiditySweepRule extends BaseRule {
+  id = 'rule_sweep';
+  evaluate(context: RuleEvaluationContext): RuleResult {
     const candles = context.candles || context.marketData?.candles || [];
-    if (candles.length < 50) return this.createResult('rule_sweep', 'unknown', {}, ['Insufficient candles for sweep detection']);
+    if (candles.length < 50) return this.createResult('unknown', {}, ['Insufficient candles for sweep detection']);
     
     if (!context.indicators.sweeps) context.indicators.sweeps = findSweeps(candles);
     const sweeps = context.indicators.sweeps;
@@ -83,39 +103,36 @@ export class RuleEngine {
         const lastSweep = sweeps[sweeps.length - 1];
         const sweepIndex = candles.findIndex((c: Candle) => c.timestamp === lastSweep.time);
         if (sweepIndex > -1 && candles.length - sweepIndex <= 5) {
-            return this.createResult('rule_sweep', 'valid', { sweep: lastSweep }, []);
-        } else {
-            return this.createResult('rule_sweep', 'invalid', {}, ['Sweep is too old or stale']);
+            return this.createResult('valid', { sweep: lastSweep });
         }
+        return this.createResult('invalid', {}, ['Sweep is too old or stale']);
     }
-    return this.createResult('rule_sweep', 'invalid', {}, ['Hanya retracement biasa tanpa sweep']);
+    return this.createResult('invalid', {}, ['Hanya retracement biasa tanpa sweep']);
   }
+}
 
-  // --- CHoCH RULE ---
-  evaluateStructureBreak(context: RuleEvaluationContext): RuleResult {
+export class StructureBreakRule extends BaseRule {
+  id = 'rule_choch';
+  evaluate(context: RuleEvaluationContext): RuleResult {
     const candles = context.candles || context.marketData?.candles || [];
-    if (candles.length < 50) return this.createResult('rule_choch', 'unknown', {}, ['Insufficient candles for structure']);
+    if (candles.length < 50) return this.createResult('unknown', {}, ['Insufficient candles for structure']);
     
     if (!context.indicators.mss) context.indicators.mss = MSSEngine.evaluate(candles);
     const mss = context.indicators.mss;
     if (mss) {
         const mssIndex = candles.findIndex((c: Candle) => c.timestamp === mss.time);
         if (mssIndex > -1 && candles.length - mssIndex <= 5) {
-            return this.createResult('rule_choch', 'valid', { mss }, []);
-        } else {
-            return this.createResult('rule_choch', 'invalid', {}, ['CHoCH is too old or stale']);
+            return this.createResult('valid', { mss });
         }
+        return this.createResult('invalid', {}, ['CHoCH is too old or stale']);
     }
-    return this.createResult('rule_choch', 'invalid', {}, ['Breakout tipis yang langsung gagal atau tidak ada close konfirmasi']);
+    return this.createResult('invalid', {}, ['Breakout tipis yang langsung gagal atau tidak ada close konfirmasi']);
   }
+}
 
-  // --- MSS RULE ---
-  evaluateMSS(context: RuleEvaluationContext): RuleResult {
-      return this.evaluateStructureBreak(context);
-  }
-
-  // --- BOS RULE ---
-  evaluateBOS(context: RuleEvaluationContext): RuleResult {
+export class BOSRule extends BaseRule {
+  id = 'rule_bos';
+  evaluate(context: RuleEvaluationContext): RuleResult {
       const candles = context.candles || context.marketData?.candles || [];
       if (!context.indicators.bos) context.indicators.bos = findBOS(candles);
       const bos = context.indicators.bos;
@@ -123,131 +140,232 @@ export class RuleEngine {
           const lastBos = bos[bos.length - 1];
           const bosIndex = candles.findIndex((c: Candle) => c.timestamp === lastBos.time);
           if (bosIndex > -1 && candles.length - bosIndex <= 5) {
-              return this.createResult('rule_bos', 'valid', { bos: lastBos }, []);
-          } else {
-              return this.createResult('rule_bos', 'invalid', {}, ['BOS is too old or stale']);
+              return this.createResult('valid', { bos: lastBos });
           }
+          return this.createResult('invalid', {}, ['BOS is too old or stale']);
       }
-      return this.createResult('rule_bos', 'invalid', {}, ['Wick semu tanpa continuation']);
+      return this.createResult('invalid', {}, ['Wick semu tanpa continuation']);
   }
+}
 
-  // --- ORDER BLOCK RULE ---
-  evaluateSupplyDemandZone(context: RuleEvaluationContext): RuleResult {
+export class SupplyDemandZoneRule extends BaseRule {
+  id = 'rule_ob';
+  evaluate(context: RuleEvaluationContext): RuleResult {
     const candles = context.candles || context.marketData?.candles || [];
-    if (candles.length < 20) return this.createResult('rule_ob', 'unknown', {}, ['Insufficient candles']);
+    if (candles.length < 20) return this.createResult('unknown', {}, ['Insufficient candles']);
     
     if (!context.indicators.obs) context.indicators.obs = SupplyDemandEngine.evaluate(candles);
     const obs = context.indicators.obs;
     if (obs.length > 0) {
-       // Allow OB to be slightly older but price must be near it.
        const lastOb = obs[obs.length - 1];
        const currentPrice = candles[candles.length - 1].close;
-       // Check if price is within the OB zone
        if (currentPrice >= lastOb.bottom && currentPrice <= lastOb.top) {
-           return this.createResult('rule_ob', 'valid', { ob: lastOb }, []);
-       } else {
-           return this.createResult('rule_ob', 'invalid', {}, ['Price is not mitigating the OB currently']);
+           return this.createResult('valid', { ob: lastOb });
        }
+       return this.createResult('invalid', {}, ['Price is not mitigating the OB currently']);
     }
-    return this.createResult('rule_ob', 'invalid', {}, ['Candle acak tanpa displacement (bukan OB valid)']);
+    return this.createResult('invalid', {}, ['Candle acak tanpa displacement (bukan OB valid)']);
   }
+}
 
-  // --- FAIR VALUE GAP RULE ---
-  evaluateRetest(context: RuleEvaluationContext): RuleResult {
+export class RetestRule extends BaseRule {
+  id = 'rule_fvg';
+  evaluate(context: RuleEvaluationContext): RuleResult {
     const candles = context.candles || context.marketData?.candles || [];
     if (!context.indicators.fvgs) context.indicators.fvgs = ImbalanceEngine.evaluate(candles);
     const fvgs = context.indicators.fvgs;
     if (fvgs.length > 0) {
         const lastFvg = fvgs[fvgs.length - 1];
         const currentPrice = candles[candles.length - 1].close;
-        // Check if price is within the FVG (mitigating it)
         if (currentPrice >= lastFvg.bottom && currentPrice <= lastFvg.top) {
-            return this.createResult('rule_fvg', 'valid', { fvg: lastFvg }, []);
-        } else {
-            return this.createResult('rule_fvg', 'invalid', {}, ['Price is not mitigating the FVG currently']);
+            return this.createResult('valid', { fvg: lastFvg });
         }
+        return this.createResult('invalid', {}, ['Price is not mitigating the FVG currently']);
     }
-    return this.createResult('rule_fvg', 'invalid', {}, ['Area sudah terisi penuh atau tidak ada displacement']);
+    return this.createResult('invalid', {}, ['Area sudah terisi penuh atau tidak ada displacement']);
   }
+}
 
-  // --- EQUAL HIGH / EQUAL LOW RULE ---
-  evaluateEqualHighLow(context: RuleEvaluationContext): RuleResult {
+export class EqualHighLowRule extends BaseRule {
+  id = 'rule_eqhl';
+  evaluate(context: RuleEvaluationContext): RuleResult {
       const candles = context.candles || context.marketData?.candles || [];
       if (!context.indicators.eqhl) context.indicators.eqhl = EqualHighLowEngine.evaluate(candles);
       const { eqh, eql } = context.indicators.eqhl;
       if (eqh.length > 0 || eql.length > 0) {
-          return this.createResult('rule_eqhl', 'valid', { eqh, eql }, []);
+          return this.createResult('valid', { eqh, eql });
       }
-      return this.createResult('rule_eqhl', 'invalid', {}, ['Level terlalu jauh atau tidak presisi']);
+      return this.createResult('invalid', {}, ['Level terlalu jauh atau tidak presisi']);
   }
+}
 
-  // --- LEVEL LIQUIDITY RULE (for strategy compat) ---
-  evaluateLiquidityLevel(context: RuleEvaluationContext): RuleResult {
+export class LiquidityLevelRule extends BaseRule {
+  id = 'rule_level_liquidity';
+  evaluate(context: RuleEvaluationContext): RuleResult {
     const candles = context.candles || context.marketData?.candles || [];
-    if (candles.length < 50) return this.createResult('rule_level_liquidity', 'unknown', {}, ['Insufficient candles for pivots']);
+    if (candles.length < 50) return this.createResult('unknown', {}, ['Insufficient candles for pivots']);
     
     if (!context.indicators.pivots) context.indicators.pivots = LiquidityMapEngine.evaluate(candles);
     const pivots = context.indicators.pivots;
-    return this.createResult('rule_level_liquidity', 'valid', { levels: pivots }, []);
+    return this.createResult('valid', { levels: pivots });
   }
+}
 
-  // --- OTHER PATTERNS (for compat) ---
-  evaluateEngulfing(context: RuleEvaluationContext): RuleResult {
+export class EngulfingRule extends BaseRule {
+  id = 'rule_engulfing';
+  evaluate(context: RuleEvaluationContext): RuleResult {
     const candles = context.candles || context.marketData?.candles || [];
     const engulfing = detectEngulfing(candles);
     if (engulfing) {
-        return this.createResult('rule_engulfing', 'valid', { engulfing }, []);
+        return this.createResult('valid', { engulfing });
     }
-    return this.createResult('rule_engulfing', 'invalid', {}, ['No engulfing pattern detected']);
+    return this.createResult('invalid', {}, ['No engulfing pattern detected']);
   }
+}
 
-  evaluateChartPattern(context: RuleEvaluationContext, pattern: 'double_top' | 'double_bottom'): RuleResult {
+export class ChartPatternRule extends BaseRule {
+  id = 'rule_pattern';
+  evaluate(context: RuleEvaluationContext, pattern: 'double_top' | 'double_bottom'): RuleResult {
     const candles = context.candles || context.marketData?.candles || [];
     const detected = detectDoubleTopBottom(candles);
     if (detected === pattern) {
-        return this.createResult('rule_pattern', 'valid', { pattern: detected }, []);
+        return this.createResult('valid', { pattern: detected });
     }
-    return this.createResult('rule_pattern', 'invalid', {}, ['Pattern not detected']);
+    return this.createResult('invalid', {}, ['Pattern not detected']);
   }
+}
 
-  evaluateNecklineBreak(context: RuleEvaluationContext): RuleResult {
-    return this.evaluateStructureBreak(context);
-  }
-
-  evaluateNewsImpact(context: RuleEvaluationContext): RuleResult {
-    const news = context.marketData?.news || [];
-    const highImpact = news.filter((n: any) => n.impact === 'high');
-    if (highImpact.length > 0) {
-        return this.createResult('rule_news', 'valid', { news: highImpact }, []);
-    }
-    return this.createResult('rule_news', 'invalid', {}, ['No high impact news']);
-  }
-
-  evaluateAggressiveRejection(context: RuleEvaluationContext): RuleResult {
+export class AggressiveRejectionRule extends BaseRule {
+  id = 'rule_rejection';
+  evaluate(context: RuleEvaluationContext): RuleResult {
     const candles = context.candles || context.marketData?.candles || [];
-    if (candles.length < 20) return this.createResult('rule_rejection', 'unknown', {}, ['No candles']);
+    if (candles.length < 20) return this.createResult('unknown', {}, ['No candles']);
     
     const curr = candles[candles.length - 1];
     const bodySize = Math.abs(curr.close - curr.open);
     const upperWick = curr.high - Math.max(curr.close, curr.open);
     const lowerWick = Math.min(curr.close, curr.open) - curr.low;
     
-    const { calculateATR } = require('./indicators');
     const atr = calculateATR(candles, 20) || 0.0001;
 
     if ((upperWick > bodySize * 2 && upperWick > atr * 0.3) || (lowerWick > bodySize * 2 && lowerWick > atr * 0.3)) {
-        return this.createResult('rule_rejection', 'valid', { rejection: true }, []);
+        return this.createResult('valid', { rejection: true });
     }
-    return this.createResult('rule_rejection', 'invalid', {}, ['No strong rejection wick relative to ATR']);
+    return this.createResult('invalid', {}, ['No strong rejection wick relative to ATR']);
+  }
+}
+
+export class VolumeRule extends BaseRule {
+  id = 'rule_volume';
+  evaluate(context: RuleEvaluationContext): RuleResult {
+    const candles = context.candles || [];
+    if (candles.length < 20) return this.createResult('unknown', {}, ['No candles for volume analysis']);
+    
+    let volSum = 0;
+    for (let i = candles.length - 20; i < candles.length - 1; i++) {
+        volSum += candles[i].volume || 0;
+    }
+    const avgVol = volSum / 19;
+    const currentVol = candles[candles.length - 1].volume || 0;
+
+    if (currentVol > avgVol * 1.5) {
+        return this.createResult('valid', { volume: currentVol, avgVolume: avgVol, status: 'high' });
+    }
+    return this.createResult('invalid', { volume: currentVol, avgVolume: avgVol, status: 'low' }, ['Volume is not significantly above average']);
+  }
+}
+
+export class VolatilityRule extends BaseRule {
+  id = 'rule_volatility';
+  evaluate(context: RuleEvaluationContext): RuleResult {
+      const candles = context.candles || [];
+      if (candles.length < 20) return this.createResult('unknown', {}, ['No candles for volatility analysis']);
+      
+      const atr = calculateATR(candles, 14);
+      if (atr && atr > 1.5) { 
+          return this.createResult('valid', { atr });
+      }
+      return this.createResult('invalid', { atr }, ['Volatility is too low']);
+  }
+}
+
+export class CorrelationRule extends BaseRule {
+  id = 'rule_correlation';
+  evaluate(context: RuleEvaluationContext): RuleResult {
+      const { correlations } = context.marketData || {};
+      if (correlations) {
+          return this.createResult('valid', { dxy: correlations.dxy, us10y: correlations.us10y, cotData: correlations.cotData });
+      }
+      return this.createResult('unknown', {}, ['No correlation data available']);
+  }
+}
+
+export class NewsRule extends BaseRule {
+  id = 'rule_news';
+  evaluate(context: RuleEvaluationContext): RuleResult {
+      const { calendar } = context.marketData || {};
+      const highImpact = calendar?.filter((e: any) => e.impact === 'high' || e.impact === 'High') || [];
+      
+      if (highImpact.length > 0) {
+          return this.createResult('valid', { news: highImpact });
+      }
+      return this.createResult('invalid', {}, ['No high impact news']);
+  }
+}
+
+// ==========================================
+// CORE RULE ENGINE (Facade/Registry)
+// ==========================================
+
+export class RuleEngine {
+  private rules: Map<string, IRule> = new Map();
+
+  constructor() {
+    this.registerRule(new SessionRule());
+    this.registerRule(new TrendRule());
+    this.registerRule(new LiquiditySweepRule());
+    this.registerRule(new StructureBreakRule());
+    this.registerRule(new BOSRule());
+    this.registerRule(new SupplyDemandZoneRule());
+    this.registerRule(new RetestRule());
+    this.registerRule(new EqualHighLowRule());
+    this.registerRule(new LiquidityLevelRule());
+    this.registerRule(new EngulfingRule());
+    this.registerRule(new ChartPatternRule());
+    this.registerRule(new AggressiveRejectionRule());
+    this.registerRule(new VolumeRule());
+    this.registerRule(new VolatilityRule());
+    this.registerRule(new CorrelationRule());
+    this.registerRule(new NewsRule());
   }
 
-  private createResult(ruleId: string, status: RuleStatus, evidence: Record<string, any> = {}, invalidations: string[] = []): RuleResult {
-    return {
-      ruleId,
-      status,
-      evidence,
-      invalidations,
-      timestamp: new Date().toISOString()
-    };
+  public registerRule(rule: IRule) {
+    this.rules.set(rule.id, rule);
   }
+
+  public executeRule(ruleId: string, context: RuleEvaluationContext, ...args: any[]): RuleResult {
+    const rule = this.rules.get(ruleId);
+    if (!rule) throw new Error(`Rule ${ruleId} not found`);
+    return rule.evaluate(context, ...args);
+  }
+
+  // Legacy facade methods for backwards compatibility with existing strategies
+  evaluateSession(context: RuleEvaluationContext, targetSession: 'london' | 'newyork' | 'all'): RuleResult { return this.executeRule('rule_session', context, targetSession); }
+  evaluateTrend(context: RuleEvaluationContext, _timeframe?: string): RuleResult { return this.executeRule('rule_trend', context, _timeframe); }
+  evaluateLiquiditySweep(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_sweep', context); }
+  evaluateStructureBreak(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_choch', context); }
+  evaluateMSS(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_choch', context); }
+  evaluateBOS(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_bos', context); }
+  evaluateSupplyDemandZone(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_ob', context); }
+  evaluateRetest(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_fvg', context); }
+  evaluateEqualHighLow(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_eqhl', context); }
+  evaluateLiquidityLevel(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_level_liquidity', context); }
+  evaluateEngulfing(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_engulfing', context); }
+  evaluateChartPattern(context: RuleEvaluationContext, pattern: 'double_top' | 'double_bottom'): RuleResult { return this.executeRule('rule_pattern', context, pattern); }
+  evaluateNecklineBreak(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_choch', context); }
+  evaluateAggressiveRejection(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_rejection', context); }
+  evaluateVolume(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_volume', context); }
+  evaluateVolatility(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_volatility', context); }
+  evaluateCorrelation(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_correlation', context); }
+  evaluateNews(context: RuleEvaluationContext): RuleResult { return this.executeRule('rule_news', context); }
 }

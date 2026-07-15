@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { ApiResponse } from '@/types';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import crypto from 'crypto';
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const reqId = req.headers.get('x-request-id') || crypto.randomUUID();
   let logs: any[] = [];
   let success = false;
   let error = null;
@@ -14,11 +16,17 @@ export async function GET() {
     
     if (!Array.isArray(logsRes)) {
       if (logsRes.status === 'not_configured') {
-         return NextResponse.json({
+         const emptyResponse: ApiResponse<any> = {
             success: true,
             data: { logs: [] },
-            meta: { ...logsRes }
-         });
+            error: null,
+            meta: {
+              request_id: reqId,
+              timestamp: new Date().toISOString(),
+              ...logsRes
+            }
+         };
+         return NextResponse.json(emptyResponse);
       }
       throw new Error(logsRes.reason || 'Failed to fetch logs');
     }
@@ -36,7 +44,7 @@ export async function GET() {
     },
     error,
     meta: {
-      request_id: crypto.randomUUID(),
+      request_id: reqId,
       timestamp: new Date().toISOString()
     }
   };

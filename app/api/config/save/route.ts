@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { ApiResponse } from '@/types';
 import { logger } from '@/lib/utils/logger';
+import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,85 +20,80 @@ const ALLOWED_KEYS = new Set([
 ]);
 
 export async function POST(req: Request) {
+  const reqId = crypto.randomUUID();
   try {
     const data = await req.json();
     logger.info('Config Save: Received request to update configuration');
-    const envPath = path.join(process.cwd(), '.env');
     
-    let currentEnv = '';
-    if (fs.existsSync(envPath)) {
-      currentEnv = fs.readFileSync(envPath, 'utf8');
-      logger.info('Config Load: Successfully read existing .env file');
-    } else {
-      logger.info('Config Load: .env file does not exist. Creating a new one.');
-    }
+    const isDev = process.env.NODE_ENV === 'development';
+    let keysUpdated = 0;
 
-    const envLines = currentEnv.split('\n');
-    const envMap = new Map<string, string>();
-
-    // Parse current
-    for (const line of envLines) {
-      if (line.trim() && !line.startsWith('#')) {
-        const [key, ...rest] = line.split('=');
-        if (key) envMap.set(key.trim(), rest.join('=').trim());
+    for (const [key, value] of Object.entries(data)) {
+      if (typeof value === 'string' && ALLOWED_KEYS.has(key)) {
+        const sanitizedValue = value.replace(/[\n\r]/g, '');
+        process.env[key] = sanitizedValue; 
+        logger.info(`Config Validation: Validated and applied update in memory for key: ${key}`);
+        keysUpdated++;
       }
     }
 
-    // Update
-    let keysUpdated = 0;
-    for (const [key, value] of Object.entries(data)) {
-      if (typeof value === 'string') {
-        if (ALLOWED_KEYS.has(key)) {
-          // Sanitize value (remove newlines to prevent injection)
-          const sanitizedValue = value.replace(/[\n\r]/g, '');
-          envMap.set(key, sanitizedValue);
-          process.env[key] = sanitizedValue; // Update in current process memory
-          logger.info(`Config Validation: Validated and applied update for key: ${key}`);
-          keysUpdated++;
-        } else {
-          logger.warn(`Config Validation: Rejected update for unallowed key: ${key}`);
+    if (isDev && keysUpdated > 0) {
+      const envPath = path.join(process.cwd(), '.env');
+      let currentEnv = '';
+      if (fs.existsSync(envPath)) {
+        currentEnv = fs.readFileSync(envPath, 'utf8');
+      }
+
+      const envLines = currentEnv.split('\n');
+      const envMap = new Map<string, string>();
+      
+      for (const line of envLines) {
+        if (line.trim() && !line.startsWith('#')) {
+          const [key, ...rest] = line.split('=');
+          if (key) envMap.set(key.trim(), rest.join('=').trim());
         }
       }
-    }
 
-    // Re-construct
-    const newEnvLines = [];
-    for (const line of envLines) {
-      if (line.trim() && !line.startsWith('#')) {
-        const [key] = line.split('=');
-        if (key && envMap.has(key.trim())) {
-          newEnvLines.push(`${key.trim()}=${envMap.get(key.trim())}`);
-          envMap.delete(key.trim());
+      for (const [key, value] of Object.entries(data)) {
+        if (typeof value === 'string' && ALLOWED_KEYS.has(key)) {
+          envMap.set(key, value.replace(/[\n\r]/g, ''));
+        }
+      }
+
+      const newEnvLines = [];
+      for (const line of envLines) {
+        if (line.trim() && !line.startsWith('#')) {
+          const [key] = line.split('=');
+          if (key && envMap.has(key.trim())) {
+            newEnvLines.push(`${key.trim()}=${envMap.get(key.trim())}`);
+            envMap.delete(key.trim());
+          } else {
+            newEnvLines.push(line);
+          }
         } else {
           newEnvLines.push(line);
         }
-      } else {
-        newEnvLines.push(line);
       }
-    }
 
-    // Add remaining new keys
-    for (const [key, value] of envMap.entries()) {
-      if (ALLOWED_KEYS.has(key)) {
-        newEnvLines.push(`${key}=${value}`);
+      for (const [key, value] of envMap.entries()) {
+        if (ALLOWED_KEYS.has(key)) {
+          newEnvLines.push(`${key}=${value}`);
+        }
       }
-    }
 
-    try {
-      fs.writeFileSync(envPath, newEnvLines.join('\n'));
-      logger.info(`Config Save: Successfully wrote ${keysUpdated} keys to .env file`);
-    } catch (fsError: any) {
-      logger.warn(`Config Save Error: Could not write to .env file (${fsError.message}), but process.env was updated in memory.`);
+      try {
+        fs.writeFileSync(envPath, newEnvLines.join('\n'));
+        logger.info(`Config Save: Successfully wrote ${keysUpdated} keys to .env file`);
+      } catch (fsError: any) {
+        logger.warn(`Config Save Error: Could not write to .env file (${fsError.message})`);
+      }
     }
 
     const response: ApiResponse<{ message: string }> = {
       success: true,
-      data: { message: 'Configuration saved. Restart may be required for some services.' },
+      data: { message: isDev ? 'Configuration saved to .env and memory.' : 'Configuration updated in memory only for this session. Update environment variables in your hosting provider to persist.' },
       error: null,
-      meta: {
-        request_id: crypto.randomUUID(),
-        timestamp: new Date().toISOString()
-      }
+      meta: { request_id: reqId, timestamp: new Date().toISOString() }
     };
     return NextResponse.json(response);
   } catch (error: any) {
@@ -105,10 +101,7 @@ export async function POST(req: Request) {
       success: false,
       data: null,
       error: { code: 'SAVE_ERROR', message: error.message },
-      meta: {
-        request_id: crypto.randomUUID(),
-        timestamp: new Date().toISOString()
-      }
+      meta: { request_id: reqId, timestamp: new Date().toISOString() }
     };
     return NextResponse.json(errorResponse, { status: 500 });
   }

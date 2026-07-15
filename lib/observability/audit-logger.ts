@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../supabase/client';
-import { logger } from '../utils/logger';
+import { logger, requestContext } from '../utils/logger';
 
 export interface AuditLogEntry {
   action: string;
@@ -26,10 +26,11 @@ export interface SignalAuditPayload {
 
 export class AuditLogger {
   public async log(entry: AuditLogEntry): Promise<void> {
+    const correlation_id = requestContext.getStore()?.correlationId;
     try {
       if (!getSupabaseClient().isConnected()) {
          // Supabase not configured or table missing, fallback to console logger
-         logger.info(`[AUDIT FALLBACK] ${entry.action} on ${entry.entity}:${entry.entity_id} - ${entry.status}`, entry.details);
+         logger.info(`[AUDIT FALLBACK] ${entry.action} on ${entry.entity}:${entry.entity_id} - ${entry.status}`, { ...entry.details, correlation_id });
          return;
       }
       
@@ -40,21 +41,23 @@ export class AuditLogger {
          entity_id: entry.entity_id,
          payload_json: {
            status: entry.status,
-           details: entry.details
+           details: entry.details,
+           correlation_id
          },
          created_at: new Date().toISOString()
       });
       
-      logger.info(`[AUDIT] ${entry.action} on ${entry.entity}:${entry.entity_id} - ${entry.status}`, entry.details);
+      logger.info(`[AUDIT] ${entry.action} on ${entry.entity}:${entry.entity_id} - ${entry.status}`, { ...entry.details, correlation_id });
     } catch (e) {
-      logger.error('Error persisting audit log', { reason: e instanceof Error ? e.message : String(e) });
+      logger.error('Error persisting audit log', { reason: e instanceof Error ? e.message : String(e), correlation_id });
     }
   }
 
   public async logSignalAudit(payload: SignalAuditPayload): Promise<void> {
+    const correlation_id = requestContext.getStore()?.correlationId;
     try {
       if (!getSupabaseClient().isConnected()) {
-        logger.info(`[SIGNAL AUDIT FALLBACK] Signal ${payload.signalId} decision: ${payload.decision} (${payload.reason})`);
+        logger.info(`[SIGNAL AUDIT FALLBACK] Signal ${payload.signalId} decision: ${payload.decision} (${payload.reason})`, { correlation_id });
         return;
       }
 
@@ -64,14 +67,15 @@ export class AuditLogger {
         entity_id: payload.signalId,
         payload_json: {
           status: payload.decision === 'APPROVED' ? 'success' : (payload.decision === 'REJECTED' || payload.decision === 'INVALIDATED' ? 'failure' : 'pending'),
+          correlation_id,
           ...payload
         },
         created_at: payload.timestamp
       });
 
-      logger.info(`[SIGNAL AUDIT] Signal ${payload.signalId} recorded. Decision: ${payload.decision}. Reason: ${payload.reason}`);
+      logger.info(`[SIGNAL AUDIT] Signal ${payload.signalId} recorded. Decision: ${payload.decision}. Reason: ${payload.reason}`, { correlation_id });
     } catch (e) {
-      logger.error(`Error persisting signal audit log for ${payload.signalId}`, { reason: e instanceof Error ? e.message : String(e) });
+      logger.error(`Error persisting signal audit log for ${payload.signalId}`, { reason: e instanceof Error ? e.message : String(e), correlation_id });
     }
   }
 }

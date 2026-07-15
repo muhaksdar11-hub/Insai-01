@@ -36,13 +36,13 @@ export async function GET() {
     if (getSupabaseClient().isConnected() && supabase) {
         const { data: snapshot } = await supabase
             .from('market_snapshots')
-            .select('price, timestamp')
+            .select('close, price_live, timestamp')
             .eq('symbol', 'XAUUSD')
             .order('timestamp', { ascending: false })
             .limit(1)
             .single();
-        if (snapshot && snapshot.price) {
-            latestPrice = snapshot.price;
+        if (snapshot) {
+            latestPrice = snapshot.price_live || snapshot.close || 0;
         }
     }
 
@@ -117,6 +117,11 @@ export async function GET() {
         aiRulesPassed: aiReview?.rulesPassed,
         aiRulesFailed: aiReview?.rulesFailed,
         aiConflicts: aiReview?.conflicts,
+        probabilities: aiReview?.probabilities || null,
+        confidenceScore: aiReview?.confidenceScore || null,
+        marketConfidence: aiReview?.marketConfidence || null,
+        dataQualityScore: aiReview?.dataQualityScore || null,
+        signalQualityScore: aiReview?.signalQualityScore || null,
         pips: Math.round(runningPips),
         freshness: freshness,
         createdAt: signal.created_at

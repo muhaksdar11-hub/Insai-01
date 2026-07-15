@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import * as os from 'os';
 
 export interface MetricsSnapshot {
   marketDataLatencyMs: number;
@@ -7,6 +8,13 @@ export interface MetricsSnapshot {
   dedupeRate: number;
   errorRate: number;
   notificationDeliveryRate: number;
+  queueDepth: number;
+  scannerDurationMs: number;
+  cacheHitRatio: number;
+  streamConnectionCount: number;
+  reconnectCount: number;
+  cpuPressure: number;
+  ramPressure: number;
   timestamp: string;
 }
 
@@ -18,8 +26,18 @@ class MetricsEngine {
     dedupeRate: 0,
     errorRate: 0,
     notificationDeliveryRate: 0,
+    queueDepth: 0,
+    scannerDurationMs: 0,
+    cacheHitRatio: 0,
+    streamConnectionCount: 0,
+    reconnectCount: 0,
+    cpuPressure: 0,
+    ramPressure: 0,
     timestamp: new Date().toISOString()
   };
+
+  private cacheHits = 0;
+  private cacheMisses = 0;
 
   public recordMarketDataLatency(latencyMs: number) {
     this.currentMetrics.marketDataLatencyMs = latencyMs;
@@ -49,7 +67,6 @@ class MetricsEngine {
   public recordSignalProcessed(isDeduped: boolean, isError: boolean) {
     this.currentMetrics.signalThroughput++;
     if (isDeduped) {
-        // running average logic
         this.currentMetrics.dedupeRate = (this.currentMetrics.dedupeRate + 1) / 2;
     }
     if (isError) {
@@ -65,7 +82,43 @@ class MetricsEngine {
       }
   }
 
+  public recordCacheAccess(hit: boolean) {
+      if (hit) this.cacheHits++;
+      else this.cacheMisses++;
+      const total = this.cacheHits + this.cacheMisses;
+      if (total > 0) {
+          this.currentMetrics.cacheHitRatio = this.cacheHits / total;
+      }
+  }
+
+  public updateQueueDepth(depth: number) {
+      this.currentMetrics.queueDepth = depth;
+  }
+
+  public recordScannerDuration(durationMs: number) {
+      this.currentMetrics.scannerDurationMs = durationMs;
+  }
+
+  public updateStreamConnections(count: number) {
+      this.currentMetrics.streamConnectionCount = count;
+  }
+
+  public recordReconnect() {
+      this.currentMetrics.reconnectCount++;
+  }
+
+  private updateSystemMetrics() {
+      const cpus = os.cpus();
+      const load = os.loadavg()[0]; // 1 minute load average
+      this.currentMetrics.cpuPressure = Math.min((load / cpus.length) * 100, 100);
+      
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      this.currentMetrics.ramPressure = ((totalMem - freeMem) / totalMem) * 100;
+  }
+
   public getMetrics(): MetricsSnapshot {
+    this.updateSystemMetrics();
     this.currentMetrics.timestamp = new Date().toISOString();
     return this.currentMetrics;
   }

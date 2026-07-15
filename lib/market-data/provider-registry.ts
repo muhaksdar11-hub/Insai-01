@@ -1,5 +1,6 @@
 import { ProviderHealth, HealthStatus } from '@/types';
 import { logger } from '../utils/logger';
+import { getMcpRegistry } from '../mcp/registry';
 
 interface CircuitBreakerConfig {
   failureThreshold: number;
@@ -14,21 +15,22 @@ export class ProviderRegistry {
   };
 
   constructor() {
-    this.registerProvider('TwelveData', 'price', 'not configured');
-    this.registerProvider('YahooFinance', 'price', 'healthy');
-    this.registerProvider('NewsAPI', 'news', 'not configured');
-    this.registerProvider('ForexFactory', 'calendar', 'healthy');
-    this.registerProvider('Twitter', 'sentiment', 'not configured');
-    this.registerProvider('GeminiAI', 'ai', 'not configured');
+    this.registerProvider('Polygon.io', 'price', 'NOT CONFIGURED');
+    this.registerProvider('TwelveData', 'price', 'NOT CONFIGURED');
+    this.registerProvider('YahooFinance', 'price', 'ONLINE');
+    this.registerProvider('NewsAPI', 'news', 'NOT CONFIGURED');
+    this.registerProvider('ForexFactory', 'calendar', 'ONLINE');
+    this.registerProvider('Twitter Bearer', 'news', 'NOT CONFIGURED');
+    this.registerProvider('GeminiAI', 'ai', 'NOT CONFIGURED');
   }
 
-  private registerProvider(name: string, category: ProviderHealth['category'], initialStatus: HealthStatus | 'not configured') {
+  private registerProvider(name: string, category: ProviderHealth['category'], initialStatus: HealthStatus) {
     this.healthMap.set(name, {
       providerName: name,
       category,
-      healthStatus: initialStatus === 'not configured' ? 'unavailable' : initialStatus,
+      healthStatus: initialStatus,
       lastSuccessAt: null,
-      lastError: initialStatus === 'not configured' ? 'Not configured' : null,
+      lastError: initialStatus === 'NOT CONFIGURED' ? 'Not configured' : null,
       circuitBreakerStatus: 'closed',
       failures: 0,
       lastFailureTime: 0
@@ -38,31 +40,53 @@ export class ProviderRegistry {
   public reportSuccess(providerName: string) {
     const provider = this.healthMap.get(providerName);
     if (provider) {
-      provider.healthStatus = 'healthy';
+      // Only sync if status changed to prevent spamming DB
+      const wasError = provider.healthStatus !== 'ONLINE';
+      
+      provider.healthStatus = 'ONLINE';
       provider.lastSuccessAt = new Date().toISOString();
       provider.lastError = null;
       provider.circuitBreakerStatus = 'closed';
       provider.failures = 0;
       this.healthMap.set(providerName, provider);
+      
+      if (wasError) {
+         getMcpRegistry().reportConnected(providerName).catch(() => {});
+      }
     }
   }
 
   public reportError(providerName: string, error: string) {
     const provider = this.healthMap.get(providerName);
     if (provider) {
-      provider.healthStatus = 'error';
+      provider.healthStatus = 'UNAVAILABLE';
       provider.lastError = error;
       
-      provider.failures += 1;
+      const isRateLimited = error && (error.includes('429') || error.toLowerCase().includes('rate limit') || error.toLowerCase().includes('quota') || error.toLowerCase().includes('exhausted'));
+      
+      if (isRateLimited) {
+        provider.failures = this.cbConfig.failureThreshold; // instantly open circuit breaker
+        provider.healthStatus = 'RATE LIMITED';
+      } else {
+        provider.failures += 1;
+      }
+      
       provider.lastFailureTime = Date.now();
       
       if (provider.failures >= this.cbConfig.failureThreshold) {
         provider.circuitBreakerStatus = 'open';
-        logger.error(`Circuit breaker opened for provider [${providerName}] due to consecutive failures.`);
+        if (isRateLimited) {
+           provider.lastFailureTime = Date.now() + 5 * 60 * 1000 - this.cbConfig.resetTimeoutMs;
+           logger.error(`Circuit breaker opened (RATE LIMITED) for provider [${providerName}] for 5 minutes.`);
+        } else {
+           logger.error(`Circuit breaker opened for provider [${providerName}] due to consecutive failures.`);
+        }
       }
 
       this.healthMap.set(providerName, provider);
       logger.error(`Provider error [${providerName}]: ${error}`);
+      
+      getMcpRegistry().reportError(providerName, error).catch(() => {});
     }
   }
 
@@ -98,7 +122,7 @@ export class ProviderRegistry {
 
   public isHealthy(providerName: string): boolean {
     const health = this.getProviderHealth(providerName);
-    return health?.healthStatus === 'healthy' && health?.circuitBreakerStatus === 'closed';
+    return health?.healthStatus === 'ONLINE' && health?.circuitBreakerStatus === 'closed';
   }
 }
 

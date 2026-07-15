@@ -1,53 +1,54 @@
 import { PriceProvider } from '../types';
-import { MarketSnapshot, Candle } from '@/types';
+import { MarketSnapshot, Candle, ProviderStatus } from '@/types';
 import { getProviderRegistry } from '../provider-registry';
+import { logger } from '../../utils/logger';
+import { fetchWithRetry } from '../../utils/fetch-retry';
 
 export class YahooFinanceProvider implements PriceProvider {
   public name = 'YahooFinance';
 
-  private mapSymbol(symbol: string) {
-    if (symbol === 'XAUUSD' || symbol === 'XAU/USD') return 'GC=F';
+  private formatSymbol(symbol: string): string {
+    if (symbol === 'XAUUSD') return 'GC=F';
+    if (symbol === 'DXY') return 'DX-Y.NYB';
+    if (symbol === 'US10Y') return '^TNX';
     return symbol;
   }
 
+  private mapTimeframe(tf: string): string {
+    const map: Record<string, string> = {
+      'M1': '1m', 'M5': '5m', 'M15': '15m', 'M30': '30m',
+      'H1': '60m', 'H4': '60m', // Yahoo limits intraday intervals over a few days, let's use 60m for H4 and group later or just rely on 60m for now.
+      'D1': '1d', 'W1': '1wk'
+    };
+    return map[tf.toUpperCase()] || '15m';
+  }
+
   async getLatestPrice(symbol: string): Promise<MarketSnapshot> {
+    const formattedSymbol = this.formatSymbol(symbol);
+    
     try {
-      const mappedSymbol = this.mapSymbol(symbol);
-      const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${mappedSymbol}?interval=1m&range=1d`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json'
-        }
+      logger.info(`YahooFinance REST: Fetching live price for ${formattedSymbol}`);
+      const res = await fetchWithRetry(`https://query1.finance.yahoo.com/v8/finance/chart/${formattedSymbol}?interval=1m&range=1d`, {
+          timeoutMs: 5000,
+          retries: 2
       });
-      
-      if (res.status === 404) {
-        throw new Error('Endpoint not found or symbol invalid (HTTP 404)');
-      }
-      
-      if (!res.ok) {
-        throw new Error(`HTTP Error: ${res.status}`);
-      }
-
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Received non-JSON response from Yahoo Finance");
-      }
-
+      if (res.status === 429) throw new Error('Rate Limited (429)');
       const data = await res.json();
       
       if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
-        throw new Error('Invalid response from Yahoo Finance: missing chart result');
+        throw new Error(data.chart?.error?.description || 'Failed to fetch price');
       }
 
       const result = data.chart.result[0];
       const meta = result.meta;
       const price = meta.regularMarketPrice;
+      const timestamp = new Date(meta.regularMarketTime * 1000).toISOString();
 
       getProviderRegistry().reportSuccess(this.name);
       return {
         symbol,
-        price,
-        timestamp: new Date().toISOString(),
+        price: parseFloat(price),
+        timestamp: timestamp,
         provider: this.name,
         freshness: 'live'
       };
@@ -57,67 +58,52 @@ export class YahooFinanceProvider implements PriceProvider {
     }
   }
 
-  async getCandles(symbol: string, timeframe: string, limit: number = 100): Promise<Candle[] & import('@/types').ProviderStatus> {
+  async getCandles(symbol: string, timeframe: string, limit: number = 100): Promise<Candle[] & ProviderStatus> {
+    const formattedSymbol = this.formatSymbol(symbol);
+    
     try {
-      const mappedSymbol = this.mapSymbol(symbol);
-      let interval = '15m';
+      const interval = this.mapTimeframe(timeframe);
+      // Determine range based on limit and interval roughly
       let range = '5d';
-      
-      switch(timeframe) {
-        case 'M1': interval = '1m'; range = '1d'; break;
-        case 'M5': interval = '5m'; range = '5d'; break;
-        case 'M15': interval = '15m'; range = '5d'; break;
-        case 'H1': interval = '1h'; range = '1mo'; break;
-        case 'H4': interval = '1h'; range = '3mo'; break; // YF doesn't have 4h, need to aggregate if strictly needed
-        case 'D1': interval = '1d'; range = '1y'; break;
-      }
+      if (interval === '1m' || interval === '5m') range = '5d';
+      else if (interval === '15m' || interval === '30m') range = '1mo';
+      else if (interval === '60m') range = '3mo';
+      else range = '1y';
 
-      const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${mappedSymbol}?interval=${interval}&range=${range}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json'
-        }
+      const res = await fetchWithRetry(`https://query1.finance.yahoo.com/v8/finance/chart/${formattedSymbol}?interval=${interval}&range=${range}`, {
+          timeoutMs: 5000,
+          retries: 2
       });
-      
-      if (res.status === 404) {
-        throw new Error('Endpoint not found or symbol invalid (HTTP 404)');
-      }
-
-      if (!res.ok) {
-        throw new Error(`HTTP Error: ${res.status}`);
-      }
-
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Received non-JSON response from Yahoo Finance");
-      }
-
+      if (res.status === 429) throw new Error('Rate Limited (429)');
       const data = await res.json();
 
       if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
-        throw new Error('Invalid response from Yahoo Finance: missing chart result');
+        throw new Error(data.chart?.error?.description || 'Failed to fetch candles');
       }
 
       const result = data.chart.result[0];
       const timestamps = result.timestamp;
-      const quotes = result.indicators.quote[0];
+      const quote = result.indicators.quote[0];
+      
+      if (!timestamps || !quote) {
+         throw new Error("Missing candle data in response");
+      }
 
       const candles: Candle[] = [];
       for (let i = 0; i < timestamps.length; i++) {
-        if (quotes.open[i] !== null) {
-          candles.push({
+         if (quote.open[i] === null) continue; // Skip empty periods
+         candles.push({
             timestamp: new Date(timestamps[i] * 1000).toISOString(),
-            open: quotes.open[i],
-            high: quotes.high[i],
-            low: quotes.low[i],
-            close: quotes.close[i],
-            volume: quotes.volume[i]
-          });
-        }
+            open: quote.open[i],
+            high: quote.high[i],
+            low: quote.low[i],
+            close: quote.close[i],
+            volume: quote.volume[i] || 0
+         });
       }
 
-      getProviderRegistry().reportSuccess(this.name);
-      return candles.slice(-limit);
+      // Slice the limit from the end (newest)
+      return candles.slice(-limit) as any;
     } catch (e: any) {
       getProviderRegistry().reportError(this.name, e.message);
       throw e;

@@ -1,16 +1,27 @@
 [phases.setup]
 nixPkgs = ["nodejs_22", "python311", "gcc"]
 
+[variables]
+PYTHONUNBUFFERED = "1"
+PYTHON_PORT = "8181"
+VIRTUAL_ENV = "/app/venv"
+NODE_ENV = "production"
+
 [phases.install]
 cmds = [
-    "npm ci",
+    "npm ci --no-audit --prefer-offline",
     "python3 -m venv venv",
-    ". venv/bin/activate && pip install -r python-engine/requirements.txt"
+    "venv/bin/pip install --upgrade pip",
+    "venv/bin/pip install -r python-engine/requirements.txt"
 ]
+cacheDirectories = ["/root/.npm", "/root/.cache/pip"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = [
+    "npm run build",
+    "rm -rf server.pid pyenv python-engine/venv python-engine/__pycache__ patch.sh fix.sh"
+]
 cacheDirectories = ["node_modules/.cache", ".next/cache"]
 
 [start]
-cmd = ". venv/bin/activate && npm run start"
+cmd = "npm run start"

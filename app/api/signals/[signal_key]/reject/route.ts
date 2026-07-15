@@ -2,12 +2,25 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { ApiResponse } from '@/types';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import crypto from 'crypto';
 
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ signal_key: string }> }
 ) {
   const { signal_key } = await params;
+  const reqId = crypto.randomUUID();
+
+  if (process.env.NODE_ENV !== 'development') {
+    const response: ApiResponse<null> = {
+      success: false,
+      data: null,
+      error: { code: 'FORBIDDEN', message: 'Mutation routes are only available in development mode.' },
+      meta: { request_id: reqId, timestamp: new Date().toISOString() }
+    };
+    return NextResponse.json(response, { status: 403 });
+  }
+
   let success = false;
   let error = null;
 
@@ -30,7 +43,7 @@ export async function POST(
     } : null,
     error,
     meta: {
-      request_id: crypto.randomUUID(),
+      request_id: reqId,
       timestamp: new Date().toISOString()
     }
   };

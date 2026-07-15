@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { ApiResponse } from '@/types';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import crypto from 'crypto';
 
 export async function GET(
   _request: Request,
@@ -17,15 +18,21 @@ export async function GET(
     
     // Check if data is an error object
     if (data && 'status' in data && data.status === 'not_configured') {
-       return NextResponse.json({
+       const emptyResponse: ApiResponse<any> = {
           success: true,
           data: {
              strategy_id: id,
              state: 'IDLE',
              last_updated: new Date().toISOString()
           },
-          meta: { ...data }
-       });
+          error: null,
+          meta: {
+             request_id: crypto.randomUUID(),
+             timestamp: new Date().toISOString(),
+             ...data
+          }
+       };
+       return NextResponse.json(emptyResponse);
     }
 
     if (data) {

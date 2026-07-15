@@ -13,10 +13,6 @@ const securityHeaders = [
     value: '1; mode=block'
   },
   {
-    key: 'X-Frame-Options',
-    value: 'SAMEORIGIN'
-  },
-  {
     key: 'X-Content-Type-Options',
     value: 'nosniff'
   },
@@ -28,7 +24,6 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
-  serverExternalPackages: ['ws'],
   experimental: {
   },
   async headers() {

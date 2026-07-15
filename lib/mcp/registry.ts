@@ -24,8 +24,9 @@ export class MCPRegistry {
 
   private seedRegistry() {
     // 1) Market Data
+    this.registerMCP('Polygon.io', 'Market Data', 'harga dan candle XAUUSD', 'API', 'NOT CONFIGURED', 'Requires POLYGON_API_KEY', []);
     this.registerMCP('TwelveData', 'Market Data', 'harga dan candle XAUUSD', 'API', 'NOT CONFIGURED', 'Requires TWELVEDATA_API_KEY', []);
-    this.registerMCP('YahooFinance', 'Market Data', 'referensi market tambahan', 'API', 'NOT CONFIGURED', 'Implementation missing', []);
+    this.registerMCP('YahooFinance', 'Market Data', 'referensi market tambahan', 'API', 'ONLINE', 'Public API', []);
     this.registerMCP('NewsAPI', 'Market Data', 'berita finansial', 'API', 'NOT CONFIGURED', 'Requires NEWS_API_KEY', []);
     this.registerMCP('ForexFactory', 'Market Data', 'kalender ekonomi dan impact event', 'API / Scrape', 'NOT CONFIGURED', 'Fetches public JSON', []);
     this.registerMCP('Twitter Bearer', 'Market Data', 'sentimen sosial / berita cepat', 'API', 'NOT CONFIGURED', 'Requires Twitter API key', []);

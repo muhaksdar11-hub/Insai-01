@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'async_hooks';
+
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 
 export interface LogPayload {
@@ -18,12 +20,18 @@ if (!globalAny.__logBuffer) {
 }
 export const logBuffer: any[] = globalAny.__logBuffer;
 
+export const requestContext = new AsyncLocalStorage<{ correlationId?: string }>();
+
 export const logger = {
   log: (level: LogLevel, message: string, payload?: LogPayload) => {
+    const context = requestContext.getStore();
+    const correlation_id = payload?.correlation_id || context?.correlationId;
+
     const logEntry = {
       timestamp: new Date().toISOString(),
       level,
       message,
+      ...(correlation_id ? { correlation_id } : {}),
       ...payload
     };
     

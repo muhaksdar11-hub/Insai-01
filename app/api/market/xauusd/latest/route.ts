@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ApiResponse, MarketSnapshot } from '@/types';
 import { getMarketDataService } from '@/lib/market-data/market-data-service';
+import crypto from 'crypto';
 
 export const dynamic = "force-dynamic";
 

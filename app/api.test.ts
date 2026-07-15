@@ -4,7 +4,7 @@ describe('Integration Tests - API Routes', () => {
   it('should return health status', async () => {
     // A simple test calling the exported GET function directly
     const { GET } = await import('@/app/api/system/health/route');
-    const response = await GET();
+    const response = await GET(new Request('http://localhost/api/system/health'));
     expect(response.status).toBe(200);
     const data = await response.json();
     expect(data.success).toBe(true);

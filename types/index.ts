@@ -4,7 +4,7 @@ export type IntegrationStatus = 'active' | 'not configured' | 'placeholder' | 'd
 
 export type StepStatus = 'awaiting' | 'active' | 'validated' | 'approved' | 'rejected' | 'expired';
 
-export type HealthStatus = 'healthy' | 'warning' | 'degraded' | 'error' | 'unavailable';
+export type HealthStatus = 'ONLINE' | 'NOT CONFIGURED' | 'DISABLED' | 'UNAVAILABLE' | 'OFFLINE' | 'RATE LIMITED' | 'DEGRADED';
 
 export type AIDecision = 'APPROVED' | 'REJECTED' | 'WAIT' | 'INVALIDATED' | 'FAILED';
 
@@ -56,7 +56,39 @@ export interface Signal {
   createdAt: string;
 }
 
+export type SetupStatus = 
+  | 'scanning'
+  | 'candidate'
+  | 'validation'
+  | 'confirmation'
+  | 'ready'
+  | 'signal'
+  | 'expired'
+  | 'archived';
+
+export interface Setup {
+  id: string; // e.g., uuid
+  timestamp: string; // strict timestamp
+  sourceStrategy: string;
+  status: SetupStatus;
+  symbol: string;
+  timeframe: string;
+  direction?: 'buy' | 'sell';
+  entryPrice?: number;
+  slPrice?: number;
+  tpPrice?: number;
+  marketStates?: string[];
+  validationLog: {
+    timestamp: string;
+    action: string;
+    details: string;
+    status: 'success' | 'failure';
+  }[];
+  isDuplicate?: boolean;
+}
+
 export type StateName = 
+
   | 'IDLE'
   | 'WAIT_SESSION'
   | 'WAIT_TREND'
@@ -70,6 +102,7 @@ export type StateName =
   | 'WAIT_NEWS'
   | 'WAIT_REJECTION'
   | 'WAIT_STRUCTURE'
+  | 'WAIT_ZONE'
   | 'WAIT_AI'
   | 'SIGNAL_ACTIVE'
   | 'TAKE_PARTIAL'
