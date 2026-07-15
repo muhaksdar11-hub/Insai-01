@@ -3,11 +3,14 @@
 import { useFetch } from "@/hooks/use-fetch";
 import { Wifi, WifiOff, RefreshCw, X } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useMounted } from "@/hooks/use-mounted";
 
 export default function ConnectionStatus() {
   const { data: marketStatus, error: errorMarket, loading } = useFetch<any>("/api/market/xauusd/latest", null);
   const [localMarketStatus, setLocalMarketStatus] = useState<any>(null);
   
+  const mounted = useMounted();
+
   useEffect(() => {
     const handleAppUpdate = (e: any) => {
       if (e.detail?.type === 'MARKET_TICK' && e.detail?.payload) {
@@ -23,6 +26,19 @@ export default function ConnectionStatus() {
 
   const dataConnectionStatus = loading && !currentStatus ? 'connecting' : (errorMarket || currentStatus?.status === 'error' || currentStatus?.status === 'not_configured' ? 'disconnected' : 'connected');
   const realtimeSyncStatus = currentStatus?.freshness === 'live' ? 'synced' : currentStatus?.freshness === 'cached' ? 'degraded' : 'disconnected';
+
+  if (!mounted) {
+    return (
+      <div className="flex flex-col items-end gap-0.5 opacity-0">
+        <div className="flex items-center gap-1.5 text-[9px] font-medium text-zinc-400">
+           <RefreshCw className="w-3 h-3" /> Data: Connecting
+        </div>
+        <div className="flex items-center gap-1.5 text-[9px] font-medium text-zinc-400">
+           <RefreshCw className="w-3 h-3" /> Sync: Offline
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-end gap-0.5">

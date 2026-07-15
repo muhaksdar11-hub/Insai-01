@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useMounted } from "@/hooks/use-mounted";
 
 export default function TimeDisplay() {
   const [time, setTime] = useState<string>("");
+  const mounted = useMounted();
 
   useEffect(() => {
     const updateTime = () => {
@@ -24,7 +26,7 @@ export default function TimeDisplay() {
     return () => clearInterval(interval);
   }, []);
 
-  if (!time) {
+  if (!mounted || !time) {
     return <div className="text-[10px] font-mono text-zinc-500">--:--:--</div>;
   }
 

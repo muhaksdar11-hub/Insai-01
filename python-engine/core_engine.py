@@ -20,10 +20,10 @@ class CoreEngine:
         sig = "|".join((f"{getattr(c, 'timestamp', c.get('timestamp', ''))}_{getattr(c, 'close', c.get('close', 0))}" if isinstance(c, dict) else f"{c.timestamp}_{c.close}") for c in last_few)
         return f"{prefix}_{hashlib.md5(sig.encode()).hexdigest()}"
 
-    def analyze(self, candles: List[Any], provided_cache_key: str = None) -> Dict[str, Any]:
+    def analyze(self, candles: List[Any], cache_key: str = None) -> Dict[str, Any]:
         """Analyzes market structure and indicators purely using vectorized operations."""
         
-        cache_key = provided_cache_key or self._generate_cache_key(candles)
+        cache_key = cache_key or self._generate_cache_key(candles)
         
         if cache_key and cache_key in self._cache:
             self._cache.move_to_end(cache_key)
