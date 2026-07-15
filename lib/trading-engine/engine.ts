@@ -69,7 +69,8 @@ export class TradingEngine {
              reason: reason,
              signal_key: signalKey || undefined,
              payload_json: payload,
-             timeframe: payload?.context?.timeframe
+             timeframe: payload?.context?.timeframe || 'M15',
+             symbol: payload?.context?.symbol || 'XAUUSD'
          });
      } catch (e: any) {
          logger.error(`Failed to sync state ${stateName} for ${strategyId}: ${e.message}`);
