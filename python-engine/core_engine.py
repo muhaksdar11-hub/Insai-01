@@ -1,27 +1,22 @@
 import numpy as np
 import hashlib
-from typing import Dict, Any, List
+from typing import List, Dict, Any
 from shared_utilities import get_logger
 from collections import OrderedDict
 
 logger = get_logger("CoreEngine")
 
 class CoreEngine:
-    """
-    Optimized Core Engine.
-    Uses pure NumPy arrays to calculate market structure, eliminating Pandas overhead.
-    Designed for ultra-low latency, incremental updates, and high accuracy.
-    """
     def __init__(self):
-        # LRU cache implementation to prevent unbounded memory growth
+        # LRU cache to prevent re-evaluation of same candles
         self._cache = OrderedDict()
         self._max_cache_size = 1024
-        
+
     def _generate_cache_key(self, candles: List[Any], prefix: str = "") -> str:
         """Generates a stable, fast cache key based on the last few candles."""
         if not candles or len(candles) == 0: return ""
-        # Create a hash of the last 3 candles' timestamps and closes to detect changes
-        last_few = candles[-3:]
+        # Hash the last 5 candles to detect incremental changes
+        last_few = candles[-5:]
         sig = "|".join((f"{getattr(c, 'timestamp', c.get('timestamp', ''))}_{getattr(c, 'close', c.get('close', 0))}" if isinstance(c, dict) else f"{c.timestamp}_{c.close}") for c in last_few)
         return f"{prefix}_{hashlib.md5(sig.encode()).hexdigest()}"
 
@@ -44,9 +39,8 @@ class CoreEngine:
         else:
             # Fast extraction for objects
             arr = np.fromiter((x for c in candles for x in (getattr(c, 'open', 0), getattr(c, 'high', 0), getattr(c, 'low', 0), getattr(c, 'close', 0), getattr(c, 'volume', 0))), dtype=np.float64, count=len(candles)*5).reshape(-1, 5)
-
+            
         O, H, L, C, V = arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3], arr[:, 4]
-
         N = len(C)
         
         body_size = np.abs(C - O)
@@ -62,13 +56,13 @@ class CoreEngine:
         O_lb, H_lb, L_lb, C_lb = O[-lookback:], H[-lookback:], L[-lookback:], C[-lookback:]
         body_lb, grn_lb, red_lb = body_size[-lookback:], is_green[-lookback:], is_red[-lookback:]
         
-        # FVG
+        # FVG (Fair Value Gap)
         fvg_bull_active = bool(np.any((L_lb[2:] > H_lb[:-2]) & grn_lb[1:-1] & (body_lb[1:-1] > avg_body))) if lookback >= 3 else False
         fvg_bear_active = bool(np.any((H_lb[2:] < L_lb[:-2]) & red_lb[1:-1] & (body_lb[1:-1] > avg_body))) if lookback >= 3 else False
         
         # Engulfing (Last candle only)
-        bullish_engulfing = bool(red_lb[-2] and grn_lb[-1] and (C_lb[-1] > O_lb[-2]) and (O_lb[-1] < C_lb[-2])) if lookback >= 2 else False
-        bearish_engulfing = bool(grn_lb[-2] and red_lb[-1] and (C_lb[-1] < O_lb[-2]) and (O_lb[-1] > C_lb[-2])) if lookback >= 2 else False
+        bullish_engulfing = bool(red_lb[-2] and grn_lb[-1] and (C_lb[-1] > O_lb[-2]) and (O_lb[-1] < C_lb[-2]) and body_lb[-1] > avg_body) if lookback >= 2 else False
+        bearish_engulfing = bool(grn_lb[-2] and red_lb[-1] and (C_lb[-1] < O_lb[-2]) and (O_lb[-1] > C_lb[-2]) and body_lb[-1] > avg_body) if lookback >= 2 else False
         
         # Morning/Evening Star (Last 3 candles)
         morning_star = bool(red_lb[-3] and (body_lb[-2] < avg_body * 0.5) and grn_lb[-1] and (C_lb[-1] > (O_lb[-3] + C_lb[-3]) / 2)) if lookback >= 3 else False
@@ -113,8 +107,8 @@ class CoreEngine:
         liq_sweep_bull = (l_last < last_swing_low) and (c_last > last_swing_low) and (last_swing_low > 0)
         liq_sweep_bear = (h_last > last_swing_high) and (c_last < last_swing_high) and (last_swing_high > 0)
         
-        double_top = (h_last >= last_swing_high - avg_body) and (h_last <= last_swing_high + avg_body) and is_red[-1] and (last_swing_high > 0)
-        double_bottom = (l_last >= last_swing_low - avg_body) and (l_last <= last_swing_low + avg_body) and is_green[-1] and (last_swing_low > 0)
+        double_top = (h_last >= last_swing_high - (avg_body * 0.5)) and (h_last <= last_swing_high + (avg_body * 0.5)) and is_red[-1] and (last_swing_high > 0)
+        double_bottom = (l_last >= last_swing_low - (avg_body * 0.5)) and (l_last <= last_swing_low + (avg_body * 0.5)) and is_green[-1] and (last_swing_low > 0)
 
         # 4. Supply/Demand & Order Blocks
         curr_ob_bull, curr_ob_bear = False, False
@@ -128,7 +122,6 @@ class CoreEngine:
                             if h_last >= L[j] and c_last <= H[j]:
                                 curr_ob_bear = True
                             break
-            
             # Bullish OB: The last down candle before an up move that breaks structure
             for idx in sl_indices[-3:]:
                 if bos_bull or choch_bull:
@@ -181,8 +174,6 @@ class CoreEngine:
         if cache_key:
             if len(self._cache) >= self._max_cache_size:
                 self._cache.popitem(last=False)
-                
             self._cache[cache_key] = result
             
         return result
-
